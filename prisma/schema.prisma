@@ -1,0 +1,417 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id                 String             @id @default(cuid())
+  name               String
+  slug               String             @unique
+  planType           PlanType           @default(STARTER)
+  subscriptionStatus SubscriptionStatus @default(TRIAL)
+  trialEndsAt        DateTime?
+  stripeCustomerId   String?            @unique
+  maxWorkers         Int                @default(5)
+  maxProperties      Int                @default(3)
+  smsEnabled         Boolean            @default(true)
+  brandName          String?
+  brandAccentColor   String?
+  brandLogoUrl       String?
+  brandContactInfo   String?
+  slaDefaultOffsetHours Int        @default(0)
+  verificationRequired Boolean     @default(true)
+  gracePeriodEndsAt  DateTime?
+  createdAt          DateTime           @default(now())
+  users              User[]
+  properties         Property[]
+  templates          ChecklistTemplate[]
+  workOrders         WorkOrder[]
+  turnovers          Turnover[]
+  smsMessages        SmsMessage[]
+  activityLogs       ActivityLog[]
+  subscription       Subscription?
+  invites            InviteToken[]
+  shortLinks         ShortLink[]
+}
+
+enum UserRole {
+  MANAGER
+  SUPERVISOR
+  WORKER
+}
+
+enum PlanType {
+  STARTER
+  PRO
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  INCOMPLETE
+  PAST_DUE
+  CANCELLED
+}
+
+enum ActivityActionType {
+  TURNOVER_SCHEDULED
+  TURNOVER_ASSIGNED
+  TURNOVER_READY
+  TURNOVER_VERIFIED
+  READINESS_STEP_COMPLETED
+  CHECKLIST_ITEM_COMPLETED
+  PHOTO_UPLOADED
+  TEMPLATE_CREATED
+  TEMPLATE_EDITED
+  WORKER_ADDED
+  WORKER_SMS_PREF_UPDATED
+  PROPERTY_ADDED
+  MAGIC_LINK_SENT
+  MAGIC_LINK_USED
+  INVITE_SENT
+  INVITE_REVOKED
+}
+
+model User {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  name           String
+  email          String?       @unique
+  phone          String?
+  role           UserRole
+  smsOptIn       Boolean       @default(true)
+  passwordHash   String?
+  createdAt      DateTime      @default(now())
+  workOrders     WorkOrder[]   @relation("AssignedWorker")
+  managedOrders  WorkOrder[]   @relation("CreatedBy")
+  assignedTurnovers Turnover[] @relation("TurnoverAssigned")
+  createdTurnovers  Turnover[] @relation("TurnoverCreated")
+  verifiedTurnovers Turnover[] @relation("TurnoverVerified")
+  readinessEvents   ReadinessEvent[]
+  generatedOwnerReports OwnerReport[]
+  activityLogs   ActivityLog[]
+
+  @@index([organizationId])
+}
+
+model Property {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  address        String?
+  notes          String?
+  slaOffsetHours Int?
+  verificationRequired Boolean?
+  createdAt      DateTime     @default(now())
+  workOrders     WorkOrder[]
+  turnovers      Turnover[]
+
+  @@index([organizationId])
+}
+
+model ChecklistTemplate {
+  id             String                  @id @default(cuid())
+  organizationId String
+  organization   Organization            @relation(fields: [organizationId], references: [id])
+  name           String
+  items          ChecklistItemTemplate[]
+  workOrders     WorkOrder[]
+  turnovers      Turnover[]
+  createdAt      DateTime                @default(now())
+
+  @@index([organizationId])
+}
+
+model ChecklistItemTemplate {
+  id            String            @id @default(cuid())
+  templateId    String
+  template      ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  title         String
+  description   String?
+  photoRequired Boolean           @default(false)
+  sortOrder     Int               @default(0)
+}
+
+enum WorkOrderStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum TurnoverStatus {
+  NOT_READY
+  IN_PROGRESS
+  READY
+  VERIFIED
+}
+
+model Turnover {
+  id               String          @id @default(cuid())
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id])
+  propertyId       String
+  property         Property        @relation(fields: [propertyId], references: [id])
+  templateId       String?
+  template         ChecklistTemplate? @relation(fields: [templateId], references: [id])
+  assignedToId     String?
+  assignedTo       User?           @relation("TurnoverAssigned", fields: [assignedToId], references: [id])
+  createdById      String
+  createdBy        User            @relation("TurnoverCreated", fields: [createdById], references: [id])
+  title            String
+  scheduledStartAt DateTime?
+  guestArrivalAt   DateTime
+  slaDeadlineAt    DateTime
+  status           TurnoverStatus  @default(NOT_READY)
+  readinessScore   Int             @default(0)
+  readyAt          DateTime?
+  verifiedAt       DateTime?
+  verifiedById     String?
+  verifiedBy       User?           @relation("TurnoverVerified", fields: [verifiedById], references: [id])
+  workOrder        WorkOrder?
+  turnoverChecks   TurnovernessCheck[]
+  ownerReport      OwnerReport?
+  readinessHistory ReadinessEvent[]
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([organizationId])
+  @@index([propertyId])
+  @@index([status])
+  @@index([guestArrivalAt])
+  @@index([slaDeadlineAt])
+}
+
+model WorkOrder {
+  id              String            @id @default(cuid())
+  organizationId  String
+  organization    Organization      @relation(fields: [organizationId], references: [id])
+  propertyId      String
+  property        Property          @relation(fields: [propertyId], references: [id])
+  templateId      String?
+  template        ChecklistTemplate? @relation(fields: [templateId], references: [id])
+  turnoverId      String?           @unique
+  turnover        Turnover?         @relation(fields: [turnoverId], references: [id])
+  assignedToId    String?
+  assignedTo      User?             @relation("AssignedWorker", fields: [assignedToId], references: [id])
+  createdById     String
+  createdBy       User              @relation("CreatedBy", fields: [createdById], references: [id])
+  title           String
+  scheduledFor    DateTime?
+  status          WorkOrderStatus   @default(PENDING)
+  magicToken      String?           @unique
+  tokenExpiresAt  DateTime?
+  checklistRun    ChecklistRun?
+  magicLinkTokens MagicLinkToken[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([organizationId])
+  @@index([assignedToId])
+  @@index([status])
+  @@index([scheduledFor])
+}
+
+model ChecklistRun {
+  id          String             @id @default(cuid())
+  workOrderId String             @unique
+  workOrder   WorkOrder          @relation(fields: [workOrderId], references: [id])
+  startedAt   DateTime?
+  completedAt DateTime?
+  items       ChecklistItemRun[]
+  turnovernessCheck TurnovernessCheck?
+  createdAt   DateTime           @default(now())
+
+  @@index([completedAt])
+  @@index([startedAt])
+}
+
+enum ItemStatus {
+  PENDING
+  COMPLETED
+  SKIPPED
+}
+
+model ChecklistItemRun {
+  id            String       @id @default(cuid())
+  runId         String
+  run           ChecklistRun @relation(fields: [runId], references: [id])
+  title         String
+  description   String?
+  photoRequired Boolean      @default(false)
+  sortOrder     Int          @default(0)
+  status        ItemStatus   @default(PENDING)
+  completedAt   DateTime?
+  notes         String?
+  attachments   Attachment[]
+
+  @@index([runId])
+}
+
+model Attachment {
+  id        String           @id @default(cuid())
+  itemRunId String
+  itemRun   ChecklistItemRun @relation(fields: [itemRunId], references: [id])
+  url       String
+  filename  String
+  mimeType  String
+  sizeBytes Int
+  createdAt DateTime         @default(now())
+}
+
+model SmsMessage {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  to             String
+  body           String
+  provider       String
+  externalId     String?
+  status         String       @default("queued")
+  errorCode      String?
+  errorMessage   String?
+  attemptCount   Int          @default(0)
+  sentAt         DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model ActivityLog {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  userId         String?
+  user           User?              @relation(fields: [userId], references: [id])
+  actionType     ActivityActionType
+  entityType     String
+  entityId       String
+  metadata       Json?
+  createdAt      DateTime           @default(now())
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([entityType, entityId])
+}
+
+model TurnovernessCheck {
+  id             String   @id @default(cuid())
+  turnoverId     String
+  turnover       Turnover @relation(fields: [turnoverId], references: [id])
+  checklistRunId String?  @unique
+  checklistRun   ChecklistRun? @relation(fields: [checklistRunId], references: [id])
+  startedAt      DateTime?
+  completedAt    DateTime?
+  readinessDelta Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  @@index([turnoverId])
+}
+
+model ReadinessEvent {
+  id         String         @id @default(cuid())
+  turnoverId String
+  turnover   Turnover       @relation(fields: [turnoverId], references: [id])
+  status     TurnoverStatus
+  occurredAt DateTime       @default(now())
+  actorId    String?
+  actor      User?          @relation(fields: [actorId], references: [id])
+  note       String?
+
+  @@index([turnoverId])
+  @@index([occurredAt])
+}
+
+model OwnerReport {
+  id             String   @id @default(cuid())
+  turnoverId     String   @unique
+  turnover       Turnover @relation(fields: [turnoverId], references: [id])
+  generatedAt    DateTime @default(now())
+  generatedById  String?
+  generatedBy    User?    @relation(fields: [generatedById], references: [id])
+  slaStatus      String
+  readinessScore Int
+  verifiedAt     DateTime?
+  verifiedByName String?
+}
+
+model MagicLinkToken {
+  id          String    @id @default(cuid())
+  workOrderId String
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id])
+  token       String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([workOrderId])
+}
+
+model Subscription {
+  id                   String   @id @default(cuid())
+  organizationId       String   @unique
+  organization         Organization @relation(fields: [organizationId], references: [id])
+  stripeCustomerId     String   @unique
+  stripeSubscriptionId String   @unique
+  priceId              String
+  status               SubscriptionStatus
+  currentPeriodEnd     DateTime?
+  trialEndsAt          DateTime?
+  cancelAtPeriodEnd    Boolean  @default(false)
+  gracePeriodEndsAt    DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model InviteToken {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  email          String
+  role           UserRole
+  token          String       @unique
+  status         InviteStatus @default(PENDING)
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([status])
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+model ShortLink {
+  id             String       @id @default(cuid())
+  token          String       @unique
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  purpose        ShortLinkPurpose
+  target         String
+  expiresAt      DateTime?
+  usedAt         DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId])
+  @@index([expiresAt])
+}
+
+enum ShortLinkPurpose {
+  WORKER_MAGIC_LINK
+  REPORT_LINK
+}
