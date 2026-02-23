@@ -1,6 +1,6 @@
 // In-memory sliding window rate limiter.
 // NOTE: Single-instance only — resets on deploy/restart.
-// For multi-instance Fly.io scaling, replace Map with a Redis-backed store.
+// For multi-instance scaling, replace Map with a Redis-backed store.
 
 interface WindowEntry {
   count: number;

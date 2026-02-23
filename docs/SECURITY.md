@@ -30,7 +30,7 @@
 ## Secrets Management
 
 - Never commit `.env` files
-- Use `fly secrets set` for production secrets
+- Use Vercel environment variables for production secrets
 - Minimum secret length: 32 characters
 - Rotate `SESSION_SECRET` invalidates all sessions
 
@@ -39,7 +39,7 @@
 - [ ] Set `SESSION_SECRET` (min 32 chars, random)
 - [ ] Set `MAGIC_LINK_SECRET` (min 32 chars, random, different from SESSION_SECRET)
 - [ ] Set `NODE_ENV=production` (enables secure cookies)
-- [ ] Use HTTPS (`force_https = true` in fly.toml)
+- [ ] Use HTTPS (Vercel enforces HTTPS by default)
 - [ ] Set `STORAGE_PROVIDER=s3` for persistent uploads
 - [ ] Configure S3 bucket with appropriate access policies
 

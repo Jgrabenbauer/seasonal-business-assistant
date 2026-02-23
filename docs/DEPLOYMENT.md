@@ -1,86 +1,57 @@
 # Deployment — SBA
 
-## Fly.io (Recommended)
+## Vercel (Recommended)
 
 ### Prerequisites
-- [Fly CLI](https://fly.io/docs/hands-on/install-flyctl/) installed
-- `fly auth login`
+- Vercel account
+- A Postgres database (Vercel Postgres recommended)
 
-### First Deploy
+### First Deploy (Vercel Postgres)
+
+1. Create a Vercel Postgres database
+- In Vercel Dashboard: `Storage` -> `Create` -> `Postgres`
+- Copy the `DATABASE_URL` from the database connection panel
+
+2. Set environment variables in Vercel
+- Required:
+  - `DATABASE_URL`
+  - `SESSION_SECRET` (min 32 chars)
+  - `MAGIC_LINK_SECRET` (min 32 chars)
+  - `PUBLIC_BASE_URL` (e.g. `https://yourapp.vercel.app`)
+- Optional (Twilio, S3, Stripe, Resend): see the table below
+
+3. Deploy
+- Connect the repo in Vercel and deploy
+- Vercel will run `npm install` and `npm run build`
+
+4. Run migrations (manual)
+- Run this locally or in CI with `DATABASE_URL` pointing at Vercel Postgres:
 
 ```bash
-# 1. Initialize Fly app
-fly launch --no-deploy
-
-# 2. Create Postgres database
-fly postgres create --name sba-db --region bos
-
-# 3. Attach database (sets DATABASE_URL secret automatically)
-fly postgres attach sba-db
-
-# 4. Set required secrets
-fly secrets set \
-  SESSION_SECRET="$(openssl rand -base64 32)" \
-  MAGIC_LINK_SECRET="$(openssl rand -base64 32)" \
-  PUBLIC_BASE_URL="https://sba-mvp.fly.dev"
-
-# 5. (Optional) Set Twilio secrets
-fly secrets set \
-  SMS_PROVIDER=twilio \
-  TWILIO_ACCOUNT_SID=ACxxx \
-  TWILIO_AUTH_TOKEN=xxx \
-  TWILIO_FROM_NUMBER=+1xxxxxxxxxx \
-  TWILIO_STATUS_CALLBACK_URL="https://yourapp.fly.dev/api/sms/twilio/status"
-
-# 6. (Optional) Set S3 secrets
-fly secrets set \
-  STORAGE_PROVIDER=s3 \
-  S3_REGION=us-east-1 \
-  S3_BUCKET=sba-uploads \
-  S3_ENDPOINT="https://s3.amazonaws.com" \
-  S3_FORCE_PATH_STYLE=false \
-  AWS_ACCESS_KEY_ID=xxx \
-  AWS_SECRET_ACCESS_KEY=xxx
-
-# 7. (Optional) Stripe + Resend
-fly secrets set \
-  STRIPE_SECRET_KEY=sk_live_xxx \
-  STRIPE_WEBHOOK_SECRET=whsec_xxx \
-  STRIPE_PRICE_STARTER=price_xxx \
-  STRIPE_PRICE_PRO=price_xxx \
-  STRIPE_CHECKOUT_SUCCESS_URL="https://yourapp.fly.dev/dashboard/billing?success=1" \
-  STRIPE_CHECKOUT_CANCEL_URL="https://yourapp.fly.dev/dashboard/billing?canceled=1" \
-  STRIPE_PORTAL_RETURN_URL="https://yourapp.fly.dev/dashboard/billing" \
-  RESEND_API_KEY=re_xxx \
-  RESEND_FROM_EMAIL="SBA <no-reply@yourdomain.com>"
-
-# 8. Deploy
-fly deploy
-
-# 9. Run migrations
-fly ssh console -C "npx prisma migrate deploy"
-
-# 10. Seed (optional)
-fly ssh console -C "node -e \"require('./prisma/seed')\""
-
-# 11. Start background worker (separate process)
-# Example on Fly: add a worker process in fly.toml
-# Command: npm run jobs:worker
+npx prisma migrate deploy
 ```
+
+5. Seed (optional)
+
+```bash
+node -e "require('./prisma/seed')"
+```
+
+### Background Jobs (pg-boss)
+
+Vercel serverless functions are not suitable for long-running workers. Run the
+worker as a separate service on a long-running host (Render/Railway/VM/etc):
+
+```bash
+npm run jobs:worker
+```
+
+The worker must use the same `DATABASE_URL` as the web app.
 
 ### Subsequent Deploys
 
-```bash
-fly deploy
-# Migrations run automatically via CMD in Dockerfile (or add to entrypoint)
-```
-
-### Viewing Logs
-
-```bash
-fly logs
-fly logs --app sba-mvp
-```
+- Deploy via Vercel UI or Git push
+- Run migrations manually when schema changes
 
 ## Docker Compose (Local / Self-Hosted)
 

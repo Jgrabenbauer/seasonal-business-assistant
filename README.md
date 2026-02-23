@@ -59,16 +59,15 @@ npm run test:unit    # Unit tests only
 npm run test:integration  # Integration tests (requires DB)
 ```
 
-## Deployment (Fly.io)
+## Deployment (Vercel)
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for full instructions.
 
 ```bash
-fly launch
-fly postgres create --name sba-db
-fly postgres attach sba-db
-fly secrets set SESSION_SECRET=... MAGIC_LINK_SECRET=...
-fly deploy
+# 1. Create a Vercel Postgres database and set DATABASE_URL
+# 2. Set required env vars in Vercel:
+#    SESSION_SECRET, MAGIC_LINK_SECRET, PUBLIC_BASE_URL
+# 3. Deploy
 ```
 
 ## Environment Variables
