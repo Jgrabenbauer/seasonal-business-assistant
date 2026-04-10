@@ -5,7 +5,7 @@ describe('resolveBaseUrl', () => {
     vi.resetModules();
   });
 
-  it('uses the current request origin when available', async () => {
+  it('prefers a non-loopback PUBLIC_BASE_URL over the current request origin', async () => {
     vi.doMock('$lib/server/env', () => ({
       env: {
         PUBLIC_BASE_URL: 'https://app.example.com'
@@ -14,10 +14,24 @@ describe('resolveBaseUrl', () => {
 
     const { resolveBaseUrl } = await import('$lib/server/base-url');
 
-    expect(resolveBaseUrl('https://preview.example.com')).toBe('https://preview.example.com');
+    expect(resolveBaseUrl('https://preview.example.com')).toBe('https://app.example.com');
   });
 
-  it('falls back to PUBLIC_BASE_URL when no request origin is available', async () => {
+  it('falls back to the current request origin when PUBLIC_BASE_URL points to localhost', async () => {
+    vi.doMock('$lib/server/env', () => ({
+      env: {
+        PUBLIC_BASE_URL: 'http://localhost:5173'
+      }
+    }));
+
+    const { resolveBaseUrl } = await import('$lib/server/base-url');
+
+    expect(resolveBaseUrl('https://preview.example.com/dashboard/turnovers/123')).toBe(
+      'https://preview.example.com'
+    );
+  });
+
+  it('uses PUBLIC_BASE_URL when no request origin is available', async () => {
     vi.doMock('$lib/server/env', () => ({
       env: {
         PUBLIC_BASE_URL: 'https://app.example.com'

@@ -18,10 +18,14 @@ function isLoopbackHost(hostname: string) {
 }
 
 export function resolveBaseUrl(origin?: string | URL | null) {
+  const configuredUrl = toUrl(env.PUBLIC_BASE_URL);
+  if (configuredUrl && !isLoopbackHost(configuredUrl.hostname)) {
+    return configuredUrl.origin;
+  }
+
   const requestUrl = toUrl(origin);
   if (requestUrl) return requestUrl.origin;
 
-  const configuredUrl = toUrl(env.PUBLIC_BASE_URL);
   return configuredUrl?.origin ?? DEFAULT_BASE_URL;
 }
 
