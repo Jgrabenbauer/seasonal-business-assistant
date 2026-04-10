@@ -1,8 +1,19 @@
 <script lang="ts">
   import TurnoverCard from '$lib/components/TurnoverCard.svelte';
+  import { Button } from '$lib/components/ui/button';
+  import { Badge } from '$lib/components/ui/badge';
+  import ClipboardList from 'lucide-svelte/icons/clipboard-list';
   import type { PageData } from './$types';
 
   export let data: PageData;
+
+  const columns = [
+    { key: 'upcoming' as const, label: 'Upcoming', emptyText: 'No upcoming turnovers scheduled.' },
+    { key: 'inProgress' as const, label: 'In Progress', emptyText: 'No turnovers in progress.' },
+    { key: 'ready' as const, label: 'Ready', emptyText: 'None ready yet.' },
+    { key: 'overdue' as const, label: 'Overdue', emptyText: 'No overdue turnovers.' },
+    { key: 'verified' as const, label: 'Verified', emptyText: 'No verified turnovers.' }
+  ];
 </script>
 
 <svelte:head>
@@ -11,65 +22,32 @@
 
 <div class="flex items-center justify-between mb-6">
   <div>
-    <h1 class="text-2xl font-bold">Property Readiness Board</h1>
-    <p class="text-sm text-surface-500 mt-1">Track every turnover from not ready to verified.</p>
+    <h1 class="text-2xl font-semibold">Readiness Board</h1>
+    <p class="text-sm text-muted-foreground mt-1">Track every turnover from not ready to verified.</p>
   </div>
-  <a href="/dashboard/turnovers" class="btn variant-filled-primary">Schedule Turnover</a>
+  <Button href="/dashboard/turnovers">Schedule Turnover</Button>
 </div>
 
 <div class="grid grid-cols-1 lg:grid-cols-5 gap-4">
-  <div class="space-y-3">
-    <h2 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Upcoming Turnovers</h2>
-    {#if data.columns.upcoming.length === 0}
-      <div class="card p-4 text-xs text-surface-400">No upcoming turnovers.</div>
-    {:else}
-      {#each data.columns.upcoming as turnover}
-        <TurnoverCard turnover={turnover} />
-      {/each}
-    {/if}
-  </div>
-
-  <div class="space-y-3">
-    <h2 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">In Progress</h2>
-    {#if data.columns.inProgress.length === 0}
-      <div class="card p-4 text-xs text-surface-400">No active turnovers.</div>
-    {:else}
-      {#each data.columns.inProgress as turnover}
-        <TurnoverCard turnover={turnover} />
-      {/each}
-    {/if}
-  </div>
-
-  <div class="space-y-3">
-    <h2 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Ready</h2>
-    {#if data.columns.ready.length === 0}
-      <div class="card p-4 text-xs text-surface-400">None ready yet.</div>
-    {:else}
-      {#each data.columns.ready as turnover}
-        <TurnoverCard turnover={turnover} />
-      {/each}
-    {/if}
-  </div>
-
-  <div class="space-y-3">
-    <h2 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Overdue</h2>
-    {#if data.columns.overdue.length === 0}
-      <div class="card p-4 text-xs text-surface-400">No overdue turnovers.</div>
-    {:else}
-      {#each data.columns.overdue as turnover}
-        <TurnoverCard turnover={turnover} />
-      {/each}
-    {/if}
-  </div>
-
-  <div class="space-y-3">
-    <h2 class="text-sm font-semibold text-surface-500 uppercase tracking-wide">Verified</h2>
-    {#if data.columns.verified.length === 0}
-      <div class="card p-4 text-xs text-surface-400">No verified turnovers.</div>
-    {:else}
-      {#each data.columns.verified as turnover}
-        <TurnoverCard turnover={turnover} />
-      {/each}
-    {/if}
-  </div>
+  {#each columns as col}
+    {@const items = data.columns[col.key]}
+    <div class="space-y-2">
+      <div class="flex items-center justify-between px-1 mb-2">
+        <h2 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{col.label}</h2>
+        {#if items.length > 0}
+          <Badge variant="secondary" class="text-xs">{items.length}</Badge>
+        {/if}
+      </div>
+      {#if items.length === 0}
+        <div class="rounded-lg border border-dashed border-border p-5 flex flex-col items-center text-center gap-2">
+          <ClipboardList size={20} class="text-muted-foreground" strokeWidth={1.5} />
+          <p class="text-xs text-muted-foreground">{col.emptyText}</p>
+        </div>
+      {:else}
+        {#each items as turnover}
+          <TurnoverCard {turnover} />
+        {/each}
+      {/if}
+    </div>
+  {/each}
 </div>

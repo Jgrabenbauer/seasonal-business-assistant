@@ -6,6 +6,7 @@ import { queueSms } from '$lib/server/sms/service';
 import { generatePdf } from '$lib/server/pdf';
 import { logActivity } from '$lib/server/activity-log';
 import { env } from '$lib/server/env';
+import { resolveBaseUrl } from '$lib/server/base-url';
 import { createShortLink } from '$lib/server/short-links';
 import { requirePro } from '$lib/server/feature-gate';
 import { createReportLink, renderCompletionEmail } from '$lib/server/reports';
@@ -18,7 +19,7 @@ function computeReadinessScore(items: { status: string }[]) {
   return Math.round((completed / items.length) * 100);
 }
 
-export const load: PageServerLoad = async ({ params, locals }) => {
+export const load: PageServerLoad = async ({ params, locals, url }) => {
   const turnover = await db.turnover.findFirst({
     where: { id: params.id, organizationId: locals.user!.organizationId },
     include: {
@@ -44,7 +45,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
     where: { organizationId: locals.user!.organizationId, role: 'WORKER' }
   });
 
-  const baseUrl = env.PUBLIC_BASE_URL ?? 'http://localhost:5173';
+  const baseUrl = resolveBaseUrl(url);
   const magicLink = turnover.workOrder?.magicToken
     ? `${baseUrl}/w/${turnover.workOrder.magicToken}`
     : null;
@@ -65,7 +66,8 @@ export const load: PageServerLoad = async ({ params, locals }) => {
         organizationId: locals.user!.organizationId,
         purpose: 'WORKER_MAGIC_LINK',
         target: magicLink,
-        expiresAt: turnover.workOrder?.tokenExpiresAt ?? null
+        expiresAt: turnover.workOrder?.tokenExpiresAt ?? null,
+        baseUrl
       });
       shortLink = created.url;
     }
@@ -98,7 +100,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 };
 
 export const actions: Actions = {
-  assign: async ({ request, locals, params }) => {
+  assign: async ({ request, locals, params, url }) => {
     const data = await request.formData();
     const workerId = data.get('workerId') as string;
     if (!workerId) return fail(400, { error: 'Please select a worker' });
@@ -148,13 +150,14 @@ export const actions: Actions = {
       }
     });
 
-    const baseUrl = env.PUBLIC_BASE_URL ?? 'http://localhost:5173';
+    const baseUrl = resolveBaseUrl(url);
     const longLink = `${baseUrl}/w/${token}`;
     const shortLink = await createShortLink({
       organizationId: locals.user!.organizationId,
       purpose: 'WORKER_MAGIC_LINK',
       target: longLink,
-      expiresAt
+      expiresAt,
+      baseUrl
     });
     const link = shortLink.url;
     if (locals.user!.organization.smsEnabled && worker.smsOptIn) {
@@ -183,7 +186,7 @@ export const actions: Actions = {
     throw redirect(303, `/dashboard/turnovers/${params.id}`);
   },
 
-  send_link: async ({ locals, params }) => {
+  send_link: async ({ locals, params, url }) => {
     const turnover = await db.turnover.findFirst({
       where: { id: params.id, organizationId: locals.user!.organizationId },
       include: { workOrder: { include: { assignedTo: true } } }
@@ -192,13 +195,14 @@ export const actions: Actions = {
       return fail(400, { error: 'No worker assigned or no magic link generated' });
     }
 
-    const baseUrl = env.PUBLIC_BASE_URL ?? 'http://localhost:5173';
+    const baseUrl = resolveBaseUrl(url);
     const longLink = `${baseUrl}/w/${turnover.workOrder.magicToken}`;
     const shortLink = await createShortLink({
       organizationId: locals.user!.organizationId,
       purpose: 'WORKER_MAGIC_LINK',
       target: longLink,
-      expiresAt: turnover.workOrder.tokenExpiresAt
+      expiresAt: turnover.workOrder.tokenExpiresAt,
+      baseUrl
     });
     const link = shortLink.url;
     if (locals.user!.organization.smsEnabled && turnover.workOrder.assignedTo.smsOptIn) {
@@ -330,7 +334,7 @@ export const actions: Actions = {
       include: { actor: true }
     });
 
-    const baseUrl = env.PUBLIC_BASE_URL ?? url.origin;
+    const baseUrl = resolveBaseUrl(url);
     const pdfBytes = await generatePdf(
       turnover,
       turnover.organization,
@@ -341,7 +345,7 @@ export const actions: Actions = {
     return { pdfBase64: base64, filename: `turnover-${params.id}.pdf` };
   },
 
-  send_external: async ({ locals, params, request }) => {
+  send_external: async ({ locals, params, request, url }) => {
     if (locals.user!.role !== 'MANAGER') {
       return fail(403, { error: 'Only managers can send external notifications' });
     }
@@ -372,7 +376,7 @@ export const actions: Actions = {
       return fail(400, { error: 'Turnover must be verified before sending' });
     }
 
-    const { reportUrl } = await createReportLink(turnover.id);
+    const { reportUrl } = await createReportLink(turnover.id, url);
     const checklistSummary =
       turnover.workOrder?.checklistRun?.items.map((item) => ({
         title: item.title,

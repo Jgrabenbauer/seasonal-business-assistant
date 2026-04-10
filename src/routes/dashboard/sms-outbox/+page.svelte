@@ -1,5 +1,6 @@
 <script lang="ts">
   import { formatDateTime } from '$lib/utils';
+  import { Badge } from '$lib/components/ui/badge';
   import type { PageData } from './$types';
 
   export let data: PageData;
@@ -9,33 +10,31 @@
   <title>SMS Outbox — SBA</title>
 </svelte:head>
 
-<h1 class="text-2xl font-bold mb-6">SMS Outbox</h1>
-<p class="text-surface-500 mb-6">Last 50 messages sent from this organization.</p>
+<h1 class="text-2xl font-semibold mb-2">SMS Outbox</h1>
+<p class="text-muted-foreground text-sm mb-6">Last 50 messages sent from this organization.</p>
 
 {#if data.messages.length === 0}
-  <div class="card p-8 text-center text-surface-400">
+  <div class="rounded-lg border border-dashed border-border p-8 text-center text-muted-foreground">
     <p>No messages sent yet.</p>
   </div>
 {:else}
   <div class="space-y-3">
     {#each data.messages as msg}
-      <div class="card p-4">
+      <div class="rounded-lg border border-border bg-card p-4">
         <div class="flex items-start justify-between gap-4 mb-2">
-          <div class="flex items-center gap-2">
-            <span class="badge {msg.provider === 'twilio' ? 'variant-soft-primary' : 'variant-soft-surface'}">
-              {msg.provider}
-            </span>
+          <div class="flex items-center gap-2 flex-wrap">
+            <Badge variant={msg.provider === 'twilio' ? 'default' : 'secondary'}>{msg.provider}</Badge>
             <span class="font-medium text-sm">{msg.to}</span>
-            <span class="badge variant-soft-surface text-xs">{msg.status}</span>
+            <Badge variant="outline" class="text-xs">{msg.status}</Badge>
           </div>
-          <span class="text-xs text-surface-400 flex-shrink-0">{formatDateTime(msg.createdAt)}</span>
+          <span class="text-xs text-muted-foreground flex-shrink-0">{formatDateTime(msg.createdAt)}</span>
         </div>
-        <p class="text-sm text-surface-600-300-token whitespace-pre-wrap">{msg.body}</p>
+        <p class="text-sm text-foreground whitespace-pre-wrap">{msg.body}</p>
         {#if msg.externalId}
-          <p class="text-xs text-surface-400 mt-1">SID: {msg.externalId}</p>
+          <p class="text-xs text-muted-foreground mt-1">SID: {msg.externalId}</p>
         {/if}
         {#if msg.errorMessage}
-          <p class="text-xs text-error-500 mt-1">{msg.errorMessage}</p>
+          <p class="text-xs text-destructive mt-1">{msg.errorMessage}</p>
         {/if}
       </div>
     {/each}

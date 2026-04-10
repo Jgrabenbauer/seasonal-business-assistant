@@ -9,12 +9,12 @@
 </script>
 
 {#if billingInfo.isTrialExpired}
-  <div class="bg-error-500 text-white px-4 py-2 text-sm font-medium flex items-center justify-between gap-2">
+  <div class="bg-destructive text-destructive-foreground px-4 py-2 text-sm font-medium flex items-center justify-between gap-2">
     <span>Your trial has expired. Upgrade to continue using SBA.</span>
     <a href="/dashboard/billing" class="underline font-semibold whitespace-nowrap">Upgrade now</a>
   </div>
 {:else if billingInfo.trialDaysRemaining !== null && billingInfo.trialDaysRemaining <= 3}
-  <div class="bg-warning-500 text-white px-4 py-2 text-sm font-medium flex items-center justify-between gap-2">
+  <div class="bg-warning text-warning-foreground px-4 py-2 text-sm font-medium flex items-center justify-between gap-2">
     <span>
       {billingInfo.trialDaysRemaining === 0
         ? 'Your trial expires today!'

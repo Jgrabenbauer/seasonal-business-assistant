@@ -1,11 +1,14 @@
 <script lang="ts">
   import StatusBadge from './StatusBadge.svelte';
   import { formatDateTime } from '$lib/utils';
-  import type { Turnover, Property, User } from '$lib/types';
+  import Clock from 'lucide-svelte/icons/clock';
+  import User from 'lucide-svelte/icons/user';
+  import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
+  import type { Turnover, Property, User as UserType } from '$lib/types';
 
   export let turnover: Turnover & {
     property: Property;
-    assignedTo: User | null;
+    assignedTo: UserType | null;
   };
 
   const now = () => new Date().getTime();
@@ -18,9 +21,7 @@
     const days = Math.floor(hoursTotal / 24);
     const hours = hoursTotal % 24;
     const prefix = diff >= 0 ? 'in' : 'late by';
-    if (days >= 1) {
-      return `${prefix} ${days}d ${hours}h`;
-    }
+    if (days >= 1) return `${prefix} ${days}d ${hours}h`;
     return `${prefix} ${hours}h ${mins}m`;
   }
 
@@ -30,26 +31,30 @@
   $: readiness = Math.max(0, Math.min(100, turnover.readinessScore ?? 0));
 </script>
 
-<a href="/dashboard/turnovers/{turnover.id}" class="card card-hover p-4 block no-underline">
+<a
+  href="/dashboard/turnovers/{turnover.id}"
+  class="block rounded-lg border border-border bg-card p-4 no-underline shadow-sm transition-shadow hover:shadow-md"
+>
   <div class="flex items-start justify-between gap-2">
     <div class="flex-1 min-w-0">
-      <p class="font-semibold truncate">{turnover.title}</p>
-      <p class="text-sm text-surface-500 mt-0.5">{turnover.property.name}</p>
+      <p class="font-semibold text-sm truncate text-card-foreground">{turnover.title}</p>
+      <p class="text-xs text-muted-foreground mt-0.5">{turnover.property.name}</p>
     </div>
     <StatusBadge status={turnover.status} />
   </div>
 
-  <div class="mt-3 grid grid-cols-2 gap-3 text-xs text-surface-500">
+  <div class="mt-3 grid grid-cols-2 gap-3 text-xs text-muted-foreground">
     {#if arrival}
       <div>
-        <p class="text-[11px] uppercase tracking-wide text-surface-400">Guest Arrival</p>
-        <p class="font-medium text-surface-600">{formatDateTime(arrival)}</p>
+        <p class="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">Guest Arrival</p>
+        <p class="font-medium text-foreground">{formatDateTime(arrival)}</p>
       </div>
     {/if}
     {#if sla}
       <div class="text-right">
-        <p class="text-[11px] uppercase tracking-wide text-surface-400">SLA</p>
-        <span class="badge {slaBreached ? 'variant-filled-error' : 'variant-soft-success'}">
+        <p class="text-[10px] uppercase tracking-wide text-muted-foreground mb-0.5">SLA</p>
+        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium
+          {slaBreached ? 'bg-destructive text-destructive-foreground' : 'bg-green-100 text-green-800'}">
           {slaBreached ? 'Late' : 'On Track'}
         </span>
       </div>
@@ -57,23 +62,32 @@
   </div>
 
   <div class="mt-3">
-    <div class="flex items-center justify-between text-xs text-surface-400">
+    <div class="flex items-center justify-between text-xs text-muted-foreground mb-1">
       <span>Readiness</span>
-      <span>{readiness}%</span>
+      <span class="font-medium">{readiness}%</span>
     </div>
-    <div class="h-2 bg-surface-200-700-token rounded-full overflow-hidden mt-1">
-      <div class="h-full bg-primary-500 rounded-full" style="width: {readiness}%"></div>
+    <div class="h-1.5 bg-secondary rounded-full overflow-hidden">
+      <div class="h-full bg-primary rounded-full transition-all" style="width: {readiness}%"></div>
     </div>
   </div>
 
-  <div class="flex items-center gap-4 mt-3 text-xs text-surface-400">
+  <div class="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
     {#if arrival}
-      <span>⏳ {formatCountdown(arrival)}</span>
+      <span class="flex items-center gap-1">
+        <Clock size={11} strokeWidth={2} />
+        {formatCountdown(arrival)}
+      </span>
     {/if}
     {#if turnover.assignedTo}
-      <span>👤 {turnover.assignedTo.name}</span>
+      <span class="flex items-center gap-1">
+        <User size={11} strokeWidth={2} />
+        {turnover.assignedTo.name}
+      </span>
     {:else}
-      <span class="text-warning-500">Unassigned</span>
+      <span class="flex items-center gap-1 text-yellow-600">
+        <TriangleAlert size={11} strokeWidth={2} />
+        Unassigned
+      </span>
     {/if}
   </div>
 </a>

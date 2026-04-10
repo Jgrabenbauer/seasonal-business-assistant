@@ -1,7 +1,7 @@
 import { randomBytes } from 'crypto';
 import { db } from './db';
 import { queueEmail } from './email/service';
-import { env } from './env';
+import { resolveBaseUrl } from './base-url';
 
 function randomToken(length = 32) {
   const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -17,7 +17,7 @@ export async function createInvite(params: {
   organizationId: string;
   email: string;
   role: 'WORKER' | 'SUPERVISOR';
-}) {
+}, baseUrl?: string | URL | null) {
   const token = randomToken();
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   const invite = await db.inviteToken.create({
@@ -30,14 +30,13 @@ export async function createInvite(params: {
     }
   });
 
-  await sendInviteEmail(invite.email, invite.role, invite.token);
+  await sendInviteEmail(invite.email, invite.role, invite.token, baseUrl);
 
   return invite;
 }
 
-export async function sendInviteEmail(email: string, role: string, token: string) {
-  const baseUrl = env.PUBLIC_BASE_URL ?? 'http://localhost:5173';
-  const link = `${baseUrl}/auth/invite/${token}`;
+export async function sendInviteEmail(email: string, role: string, token: string, baseUrl?: string | URL | null) {
+  const link = `${resolveBaseUrl(baseUrl)}/auth/invite/${token}`;
   await queueEmail({
     to: email,
     subject: 'You have been invited to SBA',

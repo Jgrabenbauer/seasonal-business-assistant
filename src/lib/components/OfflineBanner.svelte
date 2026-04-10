@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { Button } from '$lib/components/ui/button';
 
   let offline = false;
 
@@ -21,16 +22,12 @@
 
 {#if offline}
   <div
-    class="alert variant-filled-warning sticky top-0 z-50 rounded-none flex items-center justify-between"
+    class="sticky top-0 z-50 flex items-center justify-between rounded-none border-b border-warning bg-warning/15 px-4 py-2 text-sm font-medium text-warning-foreground"
     role="alert"
   >
-    <span class="font-semibold">You're offline. Changes will not be saved.</span>
-    <button
-      class="btn btn-sm variant-ghost"
-      on:click={() => window.location.reload()}
-      type="button"
-    >
+    <span>You're offline. Changes will not be saved.</span>
+    <Button variant="outline" size="sm" onclick={() => window.location.reload()}>
       Retry
-    </button>
+    </Button>
   </div>
 {/if}

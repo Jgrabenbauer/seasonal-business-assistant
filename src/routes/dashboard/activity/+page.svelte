@@ -40,22 +40,22 @@
 </svelte:head>
 
 <div class="space-y-4">
-  <h1 class="text-2xl font-bold">Readiness Activity</h1>
+  <h1 class="text-2xl font-semibold">Readiness Activity</h1>
 
   {#if data.logs.length === 0}
-    <div class="card p-8 text-center text-surface-500">No activity yet.</div>
+    <div class="rounded-lg border border-dashed border-border p-8 text-center text-muted-foreground">No activity yet.</div>
   {:else}
     <ul class="space-y-2">
       {#each data.logs as log (log.id)}
         {@const meta = getLogMeta(log)}
-        <li class="card p-4 flex items-start gap-3">
-          <div class="w-2 h-2 rounded-full bg-primary-500 mt-2 flex-shrink-0"></div>
+        <li class="rounded-lg border border-border bg-card p-4 flex items-start gap-3">
+          <div class="w-2 h-2 rounded-full bg-primary mt-2 flex-shrink-0"></div>
           <div class="flex-1 min-w-0">
             <p class="font-medium text-sm">{actionLabels[log.actionType] ?? log.actionType}</p>
             {#if meta?.title}
-              <p class="text-xs text-surface-500 truncate">{meta.title}</p>
+              <p class="text-xs text-muted-foreground truncate">{meta.title}</p>
             {/if}
-            <p class="text-xs text-surface-400 mt-0.5">
+            <p class="text-xs text-muted-foreground mt-0.5">
               {log.user ? `${log.user.name} (${log.user.role})` : 'Worker via link'}
               &middot; {log.entityType} &middot; {relativeTime(log.createdAt)}
             </p>

@@ -1,28 +1,20 @@
 <script lang="ts">
+  import { Badge } from '$lib/components/ui/badge';
+  import { cn } from '$lib/utils';
+
   export let status: string;
 
-  const variants: Record<string, string> = {
-    PENDING: 'variant-soft-warning',
-    IN_PROGRESS: 'variant-soft-primary',
-    COMPLETED: 'variant-soft-success',
-    CANCELLED: 'variant-soft-surface',
-    NOT_READY: 'variant-soft-warning',
-    READY: 'variant-soft-success',
-    VERIFIED: 'variant-soft-primary'
+  const config: Record<string, { label: string; class: string }> = {
+    PENDING:     { label: 'Pending',     class: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+    IN_PROGRESS: { label: 'In Progress', class: 'bg-blue-100 text-blue-800 border-blue-200' },
+    COMPLETED:   { label: 'Completed',   class: 'bg-green-100 text-green-800 border-green-200' },
+    CANCELLED:   { label: 'Cancelled',   class: 'bg-secondary text-secondary-foreground' },
+    NOT_READY:   { label: 'Not Ready',   class: 'bg-yellow-100 text-yellow-800 border-yellow-200' },
+    READY:       { label: 'Ready',       class: 'bg-green-100 text-green-800 border-green-200' },
+    VERIFIED:    { label: 'Verified',    class: 'bg-blue-100 text-blue-800 border-blue-200' }
   };
 
-  const labels: Record<string, string> = {
-    PENDING: 'Pending',
-    IN_PROGRESS: 'In Progress',
-    COMPLETED: 'Completed',
-    CANCELLED: 'Cancelled',
-    NOT_READY: 'Not Ready',
-    READY: 'Ready',
-    VERIFIED: 'Verified'
-  };
-
-  $: variant = variants[status] ?? 'variant-soft-surface';
-  $: label = labels[status] ?? status;
+  $: entry = config[status] ?? { label: status, class: 'bg-secondary text-secondary-foreground' };
 </script>
 
-<span class="badge {variant}">{label}</span>
+<Badge class={cn('font-medium', entry.class)}>{entry.label}</Badge>

@@ -1,8 +1,8 @@
 import { db } from './db';
-import { env } from './env';
+import { resolveBaseUrl } from './base-url';
 import { createShortLink } from './short-links';
 
-export async function createReportLink(turnoverId: string) {
+export async function createReportLink(turnoverId: string, baseUrl?: string | URL | null) {
   const turnover = await db.turnover.findUnique({
     where: { id: turnoverId },
     include: {
@@ -19,10 +19,11 @@ export async function createReportLink(turnoverId: string) {
     organizationId: turnover.organizationId,
     purpose: 'REPORT_LINK',
     target: turnover.id,
-    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    baseUrl
   });
 
-  const reportUrl = `${env.PUBLIC_BASE_URL ?? 'http://localhost:5173'}/reports/${short.record.token}`;
+  const reportUrl = `${resolveBaseUrl(baseUrl)}/reports/${short.record.token}`;
   return { turnover, reportUrl };
 }
 

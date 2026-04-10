@@ -1,6 +1,8 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page as pageStore } from '$app/stores';
+  import { Button } from '$lib/components/ui/button';
+  import { cn } from '$lib/utils';
 
   export let page: number;
   export let totalPages: number;
@@ -13,39 +15,39 @@
 </script>
 
 {#if totalPages > 1}
-  <div class="flex items-center justify-center gap-2 mt-4">
-    <button
-      type="button"
-      class="btn btn-sm variant-soft-surface"
+  <div class="flex items-center justify-center gap-1 mt-4">
+    <Button
+      variant="outline"
+      size="sm"
       disabled={page <= 1}
-      on:click={() => goToPage(page - 1)}
+      onclick={() => goToPage(page - 1)}
     >
       &lsaquo; Prev
-    </button>
+    </Button>
 
     {#each Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-      // Show pages around current page
       if (totalPages <= 7) return i + 1;
       if (page <= 4) return i + 1;
       if (page >= totalPages - 3) return totalPages - 6 + i;
       return page - 3 + i;
     }) as p}
-      <button
-        type="button"
-        class="btn btn-sm {p === page ? 'variant-filled-primary' : 'variant-soft-surface'}"
-        on:click={() => goToPage(p)}
+      <Button
+        variant={p === page ? 'default' : 'outline'}
+        size="sm"
+        onclick={() => goToPage(p)}
+        class={cn('min-w-8', p === page && 'pointer-events-none')}
       >
         {p}
-      </button>
+      </Button>
     {/each}
 
-    <button
-      type="button"
-      class="btn btn-sm variant-soft-surface"
+    <Button
+      variant="outline"
+      size="sm"
       disabled={page >= totalPages}
-      on:click={() => goToPage(page + 1)}
+      onclick={() => goToPage(page + 1)}
     >
       Next &rsaquo;
-    </button>
+    </Button>
   </div>
 {/if}

@@ -1,6 +1,6 @@
 import { randomBytes } from 'crypto';
 import { db } from './db';
-import { env } from './env';
+import { resolveBaseUrl } from './base-url';
 
 function randomToken(length = 10) {
   const alphabet = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -17,6 +17,7 @@ export async function createShortLink(params: {
   purpose: 'WORKER_MAGIC_LINK' | 'REPORT_LINK';
   target: string;
   expiresAt?: Date | null;
+  baseUrl?: string | URL | null;
 }) {
   let token = randomToken();
   for (let i = 0; i < 3; i++) {
@@ -35,6 +36,6 @@ export async function createShortLink(params: {
     }
   });
 
-  const baseUrl = env.PUBLIC_BASE_URL ?? 'http://localhost:5173';
+  const baseUrl = resolveBaseUrl(params.baseUrl);
   return { record, url: `${baseUrl}/s/${record.token}` };
 }

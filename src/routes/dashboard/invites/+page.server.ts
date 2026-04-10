@@ -19,7 +19,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 };
 
 export const actions: Actions = {
-  create: async ({ request, locals }) => {
+  create: async ({ request, locals, url }) => {
     if (locals.user!.role !== 'MANAGER') {
       return fail(403, { error: 'Only managers can invite' });
     }
@@ -40,7 +40,7 @@ export const actions: Actions = {
       }
     }
 
-    const invite = await createInvite({ organizationId: locals.user!.organizationId, email, role });
+    const invite = await createInvite({ organizationId: locals.user!.organizationId, email, role }, url);
     logActivity({
       organizationId: locals.user!.organizationId,
       userId: locals.user!.id,
@@ -51,7 +51,7 @@ export const actions: Actions = {
     });
     return { success: true };
   },
-  resend: async ({ request, locals }) => {
+  resend: async ({ request, locals, url }) => {
     if (locals.user!.role !== 'MANAGER') {
       return fail(403, { error: 'Only managers can invite' });
     }
@@ -65,7 +65,7 @@ export const actions: Actions = {
       where: { id: invite.id },
       data: { status: 'PENDING', expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) }
     });
-    await sendInviteEmail(updated.email, updated.role, updated.token);
+    await sendInviteEmail(updated.email, updated.role, updated.token, url);
     return { success: true };
   },
   revoke: async ({ request, locals }) => {

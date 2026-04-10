@@ -1,5 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
+  import Camera from 'lucide-svelte/icons/camera';
+  import Loader from 'lucide-svelte/icons/loader';
 
   export let item: { id: string; attachments: { id: string; url: string }[] };
   export let runId: string;
@@ -21,11 +23,7 @@
       const presignRes = await fetch('/api/uploads/presign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filename: file.name,
-          contentType: file.type,
-          sizeBytes: file.size
-        })
+        body: JSON.stringify({ filename: file.name, contentType: file.type, sizeBytes: file.size })
       });
       const presign = await presignRes.json();
 
@@ -44,9 +42,7 @@
         return;
       }
 
-      if (!presign.uploadUrl || !presign.publicUrl) {
-        throw new Error(presign.error ?? 'Upload failed');
-      }
+      if (!presign.uploadUrl || !presign.publicUrl) throw new Error(presign.error ?? 'Upload failed');
 
       const uploadRes = await fetch(presign.uploadUrl, {
         method: 'PUT',
@@ -80,16 +76,16 @@
 </script>
 
 <label
-  class="btn btn-sm variant-ghost-surface cursor-pointer flex-shrink-0 relative"
+  class="relative inline-flex h-8 cursor-pointer items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus-within:ring-2 focus-within:ring-ring"
   aria-label="Add photo"
   title="Add photo"
 >
   {#if uploading}
-    <span class="animate-spin">⏳</span>
+    <span class="animate-spin inline-flex"><Loader size={16} strokeWidth={2} /></span>
   {:else}
-    📷
+    <Camera size={16} strokeWidth={2} />
     {#if item.attachments.length > 0}
-      <span class="badge-icon variant-filled-success absolute -top-1 -right-1 text-xs w-4 h-4 flex items-center justify-center rounded-full">
+      <span class="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-green-500 text-[10px] font-bold text-white">
         {item.attachments.length}
       </span>
     {/if}
@@ -105,5 +101,5 @@
 </label>
 
 {#if error}
-  <p class="text-xs text-error-500 absolute">{error}</p>
+  <p class="text-xs text-destructive absolute">{error}</p>
 {/if}
