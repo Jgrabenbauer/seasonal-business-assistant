@@ -5,7 +5,7 @@ describe('resolveBaseUrl', () => {
     vi.resetModules();
   });
 
-  it('prefers PUBLIC_BASE_URL when configured', async () => {
+  it('uses the current request origin when available', async () => {
     vi.doMock('$lib/server/env', () => ({
       env: {
         PUBLIC_BASE_URL: 'https://app.example.com'
@@ -14,21 +14,19 @@ describe('resolveBaseUrl', () => {
 
     const { resolveBaseUrl } = await import('$lib/server/base-url');
 
-    expect(resolveBaseUrl('https://preview.example.com')).toBe('https://app.example.com');
+    expect(resolveBaseUrl('https://preview.example.com')).toBe('https://preview.example.com');
   });
 
-  it('falls back to the current request origin when PUBLIC_BASE_URL is unset', async () => {
+  it('falls back to PUBLIC_BASE_URL when no request origin is available', async () => {
     vi.doMock('$lib/server/env', () => ({
       env: {
-        PUBLIC_BASE_URL: undefined
+        PUBLIC_BASE_URL: 'https://app.example.com'
       }
     }));
 
     const { resolveBaseUrl } = await import('$lib/server/base-url');
 
-    expect(resolveBaseUrl(new URL('https://preview.example.com/dashboard/turnovers/123'))).toBe(
-      'https://preview.example.com'
-    );
+    expect(resolveBaseUrl()).toBe('https://app.example.com');
   });
 
   it('uses localhost only when no configured or request base URL is available', async () => {
@@ -41,5 +39,45 @@ describe('resolveBaseUrl', () => {
     const { resolveBaseUrl } = await import('$lib/server/base-url');
 
     expect(resolveBaseUrl()).toBe('http://localhost:5173');
+  });
+});
+
+describe('repairLoopbackUrl', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('rewrites localhost targets to the current deployment origin', async () => {
+    vi.doMock('$lib/server/env', () => ({
+      env: {
+        PUBLIC_BASE_URL: undefined
+      }
+    }));
+
+    const { repairLoopbackUrl } = await import('$lib/server/base-url');
+
+    expect(
+      repairLoopbackUrl(
+        'http://localhost:5173/w/token-123?source=sms',
+        'https://seasonal-business-assistant.vercel.app/dashboard/turnovers/abc'
+      )
+    ).toBe('https://seasonal-business-assistant.vercel.app/w/token-123?source=sms');
+  });
+
+  it('leaves non-loopback targets unchanged', async () => {
+    vi.doMock('$lib/server/env', () => ({
+      env: {
+        PUBLIC_BASE_URL: undefined
+      }
+    }));
+
+    const { repairLoopbackUrl } = await import('$lib/server/base-url');
+
+    expect(
+      repairLoopbackUrl(
+        'https://seasonal-business-assistant.vercel.app/w/token-123',
+        'https://seasonal-business-assistant.vercel.app/dashboard/turnovers/abc'
+      )
+    ).toBe('https://seasonal-business-assistant.vercel.app/w/token-123');
   });
 });
