@@ -4,6 +4,13 @@ import { requirePro } from '$lib/server/feature-gate';
 import { BillingError } from '$lib/server/errors';
 import { redirect } from '@sveltejs/kit';
 
+function toSerializableNumber(value: unknown): number | null {
+  if (value == null) return null;
+
+  const coerced = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(coerced) ? coerced : null;
+}
+
 export const load: PageServerLoad = async ({ locals }) => {
   try {
     requirePro(locals.user!.organization, 'Analytics dashboard');
@@ -15,9 +22,9 @@ export const load: PageServerLoad = async ({ locals }) => {
   }
 
   const orgId = locals.user!.organizationId;
-  const avgTimeToReady = await db.$queryRaw<
+  const avgReadyLead = await db.$queryRaw<
     { avg_minutes: number | null }[]
-  >`SELECT AVG(EXTRACT(EPOCH FROM ("readyAt" - COALESCE("scheduledStartAt","createdAt")))/60) AS avg_minutes
+  >`SELECT AVG(EXTRACT(EPOCH FROM ("guestArrivalAt" - "readyAt"))/60) AS avg_minutes
      FROM "Turnover"
      WHERE "organizationId" = ${orgId}
        AND "readyAt" IS NOT NULL`;
@@ -68,10 +75,19 @@ export const load: PageServerLoad = async ({ locals }) => {
      LIMIT 10`;
 
   return {
-    avgTimeToReadyMinutes: avgTimeToReady[0]?.avg_minutes ?? null,
-    onTime: onTime[0] ?? { total: 0, on_time: 0 },
-    avgMissedItems: missedItems[0]?.avg_missed ?? null,
-    repeatIssues,
-    workerConsistency
+    avgReadyLeadMinutes: toSerializableNumber(avgReadyLead[0]?.avg_minutes),
+    onTime: {
+      total: toSerializableNumber(onTime[0]?.total) ?? 0,
+      on_time: toSerializableNumber(onTime[0]?.on_time) ?? 0
+    },
+    avgMissedItems: toSerializableNumber(missedItems[0]?.avg_missed),
+    repeatIssues: repeatIssues.map((item) => ({
+      title: item.title,
+      count: toSerializableNumber(item.count) ?? 0
+    })),
+    workerConsistency: workerConsistency.map((worker) => ({
+      name: worker.name,
+      score: toSerializableNumber(worker.score) ?? 0
+    }))
   };
 };

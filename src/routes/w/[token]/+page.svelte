@@ -22,23 +22,10 @@
   $: pendingItems = items.filter((i) => i.status === 'PENDING' || animatingIds.has(i.id));
   $: completedItems = items.filter((i) => i.status !== 'PENDING' && !animatingIds.has(i.id));
 
-  /**
-   * Triggers the check animation using the Web Animations API directly on the
-   * clicked button's SVG children. Completely bypasses Svelte's reactive/transition
-   * system so it fires reliably on every tap, not just the first.
-   */
   function playCheckAnimation(btn: HTMLButtonElement) {
     const idle = btn.querySelector<SVGCircleElement>('.idle-circle');
     const fill = btn.querySelector<SVGCircleElement>('.fill-circle');
     const mark = btn.querySelector<SVGPathElement>('.check-mark');
-
-    // #region agent log H-anim-1
-    const fillTransform = fill ? window.getComputedStyle(fill).transform : 'NOT_FOUND';
-    const btnRect = btn.getBoundingClientRect();
-    const winH = window.innerHeight;
-    const winW = window.innerWidth;
-    fetch('http://127.0.0.1:7467/ingest/a34419ba-9091-4322-a376-bea62d5e530b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'549dcc'},body:JSON.stringify({sessionId:'549dcc',runId:'post-fix-3',location:'playCheckAnimation',message:'called',data:{hasBtn:!!btn,btnTag:btn?.tagName,hasIdle:!!idle,hasFill:!!fill,hasMark:!!mark,fillTransform,svgChildCount:btn?.querySelector('svg')?.childElementCount,btnRect:{top:Math.round(btnRect.top),left:Math.round(btnRect.left),width:Math.round(btnRect.width),height:Math.round(btnRect.height)},viewport:{w:winW,h:winH},btnVisible:btnRect.top>=0&&btnRect.bottom<=winH},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
 
     if (!fill) return;
 
@@ -60,31 +47,11 @@
       ],
       { duration: 460, easing: 'ease-out', fill: 'forwards' }
     );
-
-    // #region agent log H-anim-2
-    fetch('http://127.0.0.1:7467/ingest/a34419ba-9091-4322-a376-bea62d5e530b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'549dcc'},body:JSON.stringify({sessionId:'549dcc',runId:'post-fix-3',location:'playCheckAnimation',message:'anim-created',data:{fillAnimState:fillAnim.playState,fillAnimId:fillAnim.id},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
     // Checkmark fades in with a short delay
     mark?.animate([{ opacity: 0 }, { opacity: 1 }], {
       duration: 200,
       delay: 180,
       fill: 'forwards'
-    });
-
-    // Log state 100ms later to check if animation is still running
-    fillAnim.ready.then(() => {
-      // Sample the computed transform 80ms into animation to verify WAAPI is actually painting
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        const midTransform = window.getComputedStyle(fill).transform;
-        const midRect = fill.getBoundingClientRect();
-        fetch('http://127.0.0.1:7467/ingest/a34419ba-9091-4322-a376-bea62d5e530b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'549dcc'},body:JSON.stringify({sessionId:'549dcc',runId:'post-fix-3',location:'playCheckAnimation',message:'anim-mid',data:{fillAnimState:fillAnim.playState,fillCurrentTime:fillAnim.currentTime,midTransform,fillRect:{top:Math.round(midRect.top),left:Math.round(midRect.left),w:Math.round(midRect.width),h:Math.round(midRect.height)}},timestamp:Date.now()})}).catch(()=>{});
-      }));
-    });
-    fillAnim.finished.then(() => {
-      fetch('http://127.0.0.1:7467/ingest/a34419ba-9091-4322-a376-bea62d5e530b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'549dcc'},body:JSON.stringify({sessionId:'549dcc',runId:'post-fix-3',location:'playCheckAnimation',message:'anim-finished',data:{fillAnimState:fillAnim.playState},timestamp:Date.now()})}).catch(()=>{});
-    }).catch(() => {
-      fetch('http://127.0.0.1:7467/ingest/a34419ba-9091-4322-a376-bea62d5e530b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'549dcc'},body:JSON.stringify({sessionId:'549dcc',runId:'post-fix-3',location:'playCheckAnimation',message:'anim-CANCELLED',data:{fillAnimState:fillAnim.playState},timestamp:Date.now()})}).catch(()=>{});
     });
   }
 
@@ -92,10 +59,6 @@
     const newStatus = item.status === 'COMPLETED' ? 'PENDING' : 'COMPLETED';
     const originalStatus = item.status;
     const idx = items.findIndex((i) => i.id === item.id);
-
-    // #region agent log post-fix-3
-    fetch('http://127.0.0.1:7467/ingest/a34419ba-9091-4322-a376-bea62d5e530b',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'549dcc'},body:JSON.stringify({sessionId:'549dcc',runId:'post-fix-3',location:'entry',message:'toggleItem',data:{itemId:item.id,newStatus,idx,pendingItemsLen:pendingItems.length,animatingIds:[...animatingIds]},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
 
     let animationTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -143,7 +106,7 @@
 </script>
 
 <svelte:head>
-  <title>{data.workOrder.title} — Readiness Steps</title>
+  <title>{data.workOrder.title} — Turnover Readiness</title>
 </svelte:head>
 
 <OfflineBanner />
@@ -152,6 +115,11 @@
   <div class="mb-6">
     <h1 class="text-xl font-semibold">{data.workOrder.property.name}</h1>
     <p class="text-sm text-muted-foreground mt-0.5">{data.workOrder.title}</p>
+    {#if data.workOrder.scheduledFor}
+      <p class="text-xs text-muted-foreground mt-1">
+        Readiness deadline {new Date(data.workOrder.scheduledFor).toLocaleString()}
+      </p>
+    {/if}
   </div>
 
   {#if !data.workOrder.checklistRun}
@@ -178,14 +146,14 @@
           />
         </svg>
       </div>
-      <p class="text-2xl font-bold tracking-tight">Property Ready</p>
-      <p class="mt-2 text-sm opacity-80">All readiness steps complete. Great work!</p>
+      <p class="text-2xl font-bold tracking-tight">Ready for Sign-Off</p>
+      <p class="mt-2 text-sm opacity-80">All field steps are complete. A manager still needs to verify the turnover before it is guest-ready.</p>
     </div>
 
   {:else}
     {#if data.isOverdue && pendingCount > 0}
       <div class="rounded-lg border border-destructive bg-destructive/10 text-destructive px-4 py-2.5 mb-4 text-sm font-medium">
-        Overdue — Please complete this turnover as soon as possible.
+        Overdue turnover. Finish the remaining readiness steps as soon as possible.
       </div>
     {/if}
 
@@ -235,12 +203,12 @@
             {#if item.photoRequired && item.attachments.length === 0 && !completing}
               <p class="text-xs text-yellow-600 mt-1 flex items-center gap-1">
                 <Camera size={11} strokeWidth={2} />
-                Photo required
+                Proof photo required
               </p>
             {/if}
           </div>
 
-          <PhotoUpload bind:item {runId} />
+          <PhotoUpload bind:item />
         </li>
       {/each}
     </ul>
@@ -275,7 +243,7 @@
               <div class="flex-1 min-w-0">
                 <p class="text-base leading-snug line-through opacity-50">{item.title}</p>
               </div>
-              <PhotoUpload bind:item {runId} />
+              <PhotoUpload bind:item />
             </li>
           {/each}
         </ul>

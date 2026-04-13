@@ -1,4 +1,5 @@
 import { error, fail, redirect } from '@sveltejs/kit';
+import { Prisma } from '@prisma/client';
 import type { Actions, PageServerLoad } from './$types';
 import { db } from '$lib/server/db';
 import { createWorkerToken } from '$lib/server/magic-link';
@@ -9,17 +10,62 @@ import { env } from '$lib/server/env';
 import { resolveBaseUrl } from '$lib/server/base-url';
 import { createShortLink } from '$lib/server/short-links';
 import { requirePro } from '$lib/server/feature-gate';
-import { createReportLink, renderCompletionEmail } from '$lib/server/reports';
+import { getOrCreateReportLink, renderCompletionEmail } from '$lib/server/reports';
 import { queueEmail } from '$lib/server/email/service';
-import { computeSlaDeadline, effectiveVerificationRequired, logReadinessEvent } from '$lib/server/readiness';
+import {
+  buildTransitionErrorMessage,
+  computeSlaDeadline,
+  loadTurnoverForTruth,
+  logReadinessEvent,
+  summarizeTurnoverReadiness,
+  syncTurnoverTruth,
+  type TurnoverReadinessSummary
+} from '$lib/server/readiness';
 
-function computeReadinessScore(items: { status: string }[]) {
-  if (items.length === 0) return 0;
-  const completed = items.filter((i) => i.status === 'COMPLETED').length;
-  return Math.round((completed / items.length) * 100);
+function parseOverrideReason(formData: FormData) {
+  return (formData.get('overrideReason') as string | null)?.trim() ?? '';
+}
+
+function clearOverrideData() {
+  return {
+    exceptionOverrideAt: null,
+    exceptionOverrideById: null,
+    exceptionOverrideReason: null,
+    exceptionOverrideItemIds: Prisma.JsonNull
+  };
+}
+
+function buildOverrideData(
+  summary: TurnoverReadinessSummary,
+  actorId: string,
+  reason: string
+) {
+  return {
+    exceptionOverrideAt: new Date(),
+    exceptionOverrideById: actorId,
+    exceptionOverrideReason: reason,
+    exceptionOverrideItemIds: summary.unacknowledgedExceptionIds
+  };
+}
+
+async function getManagedTurnoverSummary(turnoverId: string, organizationId: string) {
+  const turnover = await loadTurnoverForTruth(turnoverId);
+  if (!turnover || turnover.organizationId !== organizationId) return null;
+  return {
+    turnover,
+    summary: summarizeTurnoverReadiness(turnover)
+  };
 }
 
 export const load: PageServerLoad = async ({ params, locals, url }) => {
+  const authorizedTurnover = await db.turnover.findFirst({
+    where: { id: params.id, organizationId: locals.user!.organizationId },
+    select: { id: true }
+  });
+  if (!authorizedTurnover) throw error(404, 'Turnover not found');
+
+  await syncTurnoverTruth(authorizedTurnover.id);
+
   const turnover = await db.turnover.findFirst({
     where: { id: params.id, organizationId: locals.user!.organizationId },
     include: {
@@ -27,6 +73,9 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
       property: true,
       assignedTo: true,
       createdBy: true,
+      verifiedBy: true,
+      exceptionOverrideBy: true,
+      readinessHistory: { orderBy: { occurredAt: 'desc' }, include: { actor: true } },
       template: { include: { items: { orderBy: { sortOrder: 'asc' } } } },
       workOrder: {
         include: {
@@ -44,6 +93,35 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
   const workers = await db.user.findMany({
     where: { organizationId: locals.user!.organizationId, role: 'WORKER' }
   });
+  const [activityEntries, smsUpdates] = await Promise.all([
+    db.activityLog.findMany({
+      where: {
+        organizationId: locals.user!.organizationId,
+        entityId: params.id
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 8,
+      include: {
+        user: {
+          select: {
+            name: true,
+            role: true
+          }
+        }
+      }
+    }),
+    db.smsMessage.findMany({
+      where: {
+        organizationId: locals.user!.organizationId,
+        OR: [
+          { body: { contains: turnover.title } },
+          { body: { contains: turnover.property.name } }
+        ]
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 6
+    })
+  ]);
 
   const baseUrl = resolveBaseUrl(url);
   const magicLink = turnover.workOrder?.magicToken
@@ -73,8 +151,11 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
     }
   }
 
-  const items = turnover.workOrder?.checklistRun?.items ?? [];
-  const readinessScore = computeReadinessScore(items);
+  const readiness = summarizeTurnoverReadiness(turnover);
+  const readinessScore =
+    readiness.checklist.totalSteps > 0
+      ? Math.round((readiness.checklist.completedSteps / readiness.checklist.totalSteps) * 100)
+      : 0;
 
   const effective = computeSlaDeadline({
     guestArrivalAt: turnover.guestArrivalAt,
@@ -82,20 +163,21 @@ export const load: PageServerLoad = async ({ params, locals, url }) => {
     propertyOffsetHours: turnover.property.slaOffsetHours
   });
 
-  const verificationRequired = effectiveVerificationRequired({
-    orgRequired: turnover.organization.verificationRequired,
-    propertyRequired: turnover.property.verificationRequired
-  });
+  const reportUrl =
+    turnover.status === 'VERIFIED' ? await getOrCreateReportLink(turnover.id, baseUrl) : null;
 
   return {
     turnover,
     workers,
     magicLink,
     shortLink,
+    reportUrl,
+    activityEntries,
+    smsUpdates,
+    readiness,
     readinessScore,
     slaSource: effective.source,
-    slaOffsetHours: effective.offsetHours,
-    verificationRequired
+    slaOffsetHours: effective.offsetHours
   };
 };
 
@@ -226,30 +308,34 @@ export const actions: Actions = {
   },
 
   mark_ready: async ({ locals, params }) => {
-    const turnover = await db.turnover.findFirst({
-      where: { id: params.id, organizationId: locals.user!.organizationId },
-      include: { property: true, organization: true }
-    });
-    if (!turnover) return fail(404, { error: 'Turnover not found' });
+    if (locals.user!.role === 'WORKER') {
+      return fail(403, { error: 'Only managers or supervisors can mark a turnover ready' });
+    }
 
-    const requiresVerification = effectiveVerificationRequired({
-      orgRequired: turnover.organization.verificationRequired,
-      propertyRequired: turnover.property.verificationRequired
-    });
+    const result = await getManagedTurnoverSummary(params.id, locals.user!.organizationId);
+    if (!result) return fail(404, { error: 'Turnover not found' });
+    const { turnover, summary } = result;
 
-    const updateData = requiresVerification
-      ? { status: 'READY' as const, readyAt: new Date() }
-      : { status: 'VERIFIED' as const, readyAt: new Date(), verifiedAt: new Date(), verifiedById: locals.user!.id };
+    if (!summary.canMarkReady) {
+      return fail(400, { error: buildTransitionErrorMessage(summary, 'ready') });
+    }
 
     await db.turnover.update({
       where: { id: params.id },
-      data: updateData
+      data: {
+        status: 'READY',
+        readyAt: new Date(),
+        verifiedAt: null,
+        verifiedById: null,
+        ...(summary.checklist.skippedSteps === 0 ? clearOverrideData() : {})
+      }
     });
 
     await logReadinessEvent({
       turnoverId: params.id,
-      status: requiresVerification ? 'READY' : 'VERIFIED',
-      actorId: locals.user!.id
+      status: 'READY',
+      actorId: locals.user!.id,
+      note: 'Checklist proof reviewed and promoted for manager sign-off.'
     });
 
     logActivity({
@@ -258,35 +344,98 @@ export const actions: Actions = {
       actionType: 'TURNOVER_READY',
       entityType: 'Turnover',
       entityId: params.id,
-      metadata: { title: turnover.title }
+      metadata: { title: turnover.title, overrideUsed: false }
     });
-
-    if (!requiresVerification) {
-      logActivity({
-        organizationId: locals.user!.organizationId,
-        userId: locals.user!.id,
-        actionType: 'TURNOVER_VERIFIED',
-        entityType: 'Turnover',
-        entityId: params.id,
-        metadata: { title: turnover.title }
-      });
-    }
 
     return { markedReady: true };
   },
 
-  verify: async ({ locals, params }) => {
+  mark_ready_override: async ({ locals, params, request }) => {
     if (locals.user!.role === 'WORKER') {
-      return fail(403, { error: 'Only managers or supervisors can verify' });
+      return fail(403, { error: 'Only managers or supervisors can acknowledge exceptions' });
     }
-    const turnover = await db.turnover.findFirst({
-      where: { id: params.id, organizationId: locals.user!.organizationId }
-    });
-    if (!turnover) return fail(404, { error: 'Turnover not found' });
+
+    const formData = await request.formData();
+    const overrideReason = parseOverrideReason(formData);
+    if (overrideReason.length < 8) {
+      return fail(400, { error: 'Enter a short reason before acknowledging open issues.' });
+    }
+
+    const result = await getManagedTurnoverSummary(params.id, locals.user!.organizationId);
+    if (!result) return fail(404, { error: 'Turnover not found' });
+    const { turnover, summary } = result;
+
+    if (summary.hardBlockerCount > 0) {
+      return fail(400, { error: buildTransitionErrorMessage(summary, 'ready') });
+    }
+    if (summary.unacknowledgedIssueCount === 0) {
+      return fail(400, { error: 'There are no open issues to acknowledge.' });
+    }
 
     await db.turnover.update({
       where: { id: params.id },
-      data: { status: 'VERIFIED', verifiedAt: new Date(), verifiedById: locals.user!.id }
+      data: {
+        status: 'READY',
+        readyAt: new Date(),
+        verifiedAt: null,
+        verifiedById: null,
+        ...buildOverrideData(summary, locals.user!.id, overrideReason)
+      }
+    });
+
+    await logReadinessEvent({
+      turnoverId: params.id,
+      status: 'READY',
+      actorId: locals.user!.id,
+      note: `Exceptions acknowledged for sign-off: ${overrideReason}`
+    });
+
+    logActivity({
+      organizationId: locals.user!.organizationId,
+      userId: locals.user!.id,
+      actionType: 'TURNOVER_READY',
+      entityType: 'Turnover',
+      entityId: params.id,
+      metadata: {
+        title: turnover.title,
+        overrideUsed: true,
+        overrideReason,
+        acknowledgedIssues: summary.unacknowledgedExceptionIds
+      }
+    });
+
+    return { markedReady: true };
+  },
+
+  verify: async ({ locals, params, request }) => {
+    if (locals.user!.role === 'WORKER') {
+      return fail(403, { error: 'Only managers or supervisors can verify' });
+    }
+
+    const formData = await request.formData();
+    if (formData.get('confirmVerification') !== 'on') {
+      return fail(400, { error: 'Confirm that you reviewed the proof before verifying.' });
+    }
+
+    const result = await getManagedTurnoverSummary(params.id, locals.user!.organizationId);
+    if (!result) return fail(404, { error: 'Turnover not found' });
+    const { turnover, summary } = result;
+
+    if (turnover.status !== 'READY') {
+      return fail(400, { error: 'Mark this turnover ready before verifying it.' });
+    }
+    if (!summary.canVerify) {
+      return fail(400, { error: buildTransitionErrorMessage(summary, 'verify') });
+    }
+
+    await db.turnover.update({
+      where: { id: params.id },
+      data: {
+        status: 'VERIFIED',
+        readyAt: turnover.readyAt ?? new Date(),
+        verifiedAt: new Date(),
+        verifiedById: locals.user!.id
+      }
     });
 
     logActivity({
@@ -301,19 +450,22 @@ export const actions: Actions = {
     await logReadinessEvent({
       turnoverId: params.id,
       status: 'VERIFIED',
-      actorId: locals.user!.id
+      actorId: locals.user!.id,
+      note: `Verified by ${locals.user!.name}.`
     });
 
     return { verified: true };
   },
 
   export_pdf: async ({ locals, params, url }) => {
+    await syncTurnoverTruth(params.id);
     const turnover = await db.turnover.findFirst({
       where: { id: params.id, organizationId: locals.user!.organizationId },
       include: {
         property: true,
         organization: true,
         verifiedBy: true,
+        exceptionOverrideBy: true,
         workOrder: {
           include: {
             checklistRun: {
@@ -342,7 +494,7 @@ export const actions: Actions = {
       { baseUrl, maxPhotos: 12 }
     );
     const base64 = Buffer.from(pdfBytes).toString('base64');
-    return { pdfBase64: base64, filename: `turnover-${params.id}.pdf` };
+    return { pdfBase64: base64, filename: `turnover-readiness-report-${params.id}.pdf` };
   },
 
   send_external: async ({ locals, params, request, url }) => {
@@ -363,12 +515,15 @@ export const actions: Actions = {
     const sms = (data.get('sms') as string)?.trim();
     if (!email) return fail(400, { error: 'Email is required' });
 
+    await syncTurnoverTruth(params.id);
+
     const turnover = await db.turnover.findFirst({
       where: { id: params.id, organizationId: locals.user!.organizationId },
       include: {
         organization: true,
         property: true,
         verifiedBy: true,
+        exceptionOverrideBy: true,
         workOrder: { include: { checklistRun: { include: { items: { include: { attachments: true } } } } } }
       }
     });
@@ -376,7 +531,7 @@ export const actions: Actions = {
       return fail(400, { error: 'Turnover must be verified before sending' });
     }
 
-    const { reportUrl } = await createReportLink(turnover.id, url);
+    const reportUrl = await getOrCreateReportLink(turnover.id, url);
     const checklistSummary =
       turnover.workOrder?.checklistRun?.items.map((item) => ({
         title: item.title,
@@ -402,15 +557,15 @@ export const actions: Actions = {
 
     await queueEmail({
       to: email,
-      subject: `Turnover verified — ${turnover.property.name}`,
+      subject: `Turnover readiness report — ${turnover.property.name}`,
       html,
-      text: `Turnover ${turnover.title} is verified. View certificate: ${reportUrl}`
+      text: `Turnover ${turnover.title} is verified. View the turnover readiness report: ${reportUrl}`
     });
 
     if (sms && locals.user!.organization.smsEnabled) {
       await queueSms({
         to: sms,
-        body: `Turnover verified: ${turnover.title}. Certificate: ${reportUrl}`,
+        body: `Owner update: ${turnover.title} has verified turnover proof. Report: ${reportUrl}`,
         orgId: locals.user!.organizationId
       });
     }

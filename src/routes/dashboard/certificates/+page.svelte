@@ -7,11 +7,11 @@
 </script>
 
 <svelte:head>
-  <title>Certificates — SBA</title>
+  <title>Turnover Readiness Reports — SBA</title>
 </svelte:head>
 
 <div class="flex items-center justify-between mb-6">
-  <h1 class="text-2xl font-semibold">Turnover Readiness Certificates</h1>
+  <h1 class="text-2xl font-semibold">Turnover Readiness Reports</h1>
 </div>
 
 {#if data.certificates.length === 0}
@@ -38,7 +38,7 @@
             <td class="px-4 py-3 text-muted-foreground">{formatDateTime(cert.verifiedAt)}</td>
             <td class="px-4 py-3 text-muted-foreground">{cert.verifiedBy?.name ?? '—'}</td>
             <td class="px-4 py-3 text-right">
-              <Button href="/dashboard/turnovers/{cert.id}" variant="ghost" size="sm">View</Button>
+              <Button href="/dashboard/turnovers/{cert.id}" variant="ghost" size="sm">Open report</Button>
             </td>
           </tr>
         {/each}

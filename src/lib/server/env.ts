@@ -1,4 +1,37 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { parse } from 'dotenv';
 import { z } from 'zod';
+
+function loadLocalEnvFiles() {
+  const cwd = process.cwd();
+  const baseEnv = ['.env', '.env.local'];
+  const seed = { ...process.env };
+
+  for (const file of baseEnv) {
+    const path = resolve(cwd, file);
+    if (!existsSync(path)) continue;
+    Object.assign(seed, parse(readFileSync(path)));
+  }
+
+  const mode = seed.NODE_ENV ?? 'development';
+  const modeEnv = [`.env.${mode}`, `.env.${mode}.local`];
+  const loaded: Record<string, string> = {};
+
+  for (const file of [...baseEnv, ...modeEnv]) {
+    const path = resolve(cwd, file);
+    if (!existsSync(path)) continue;
+    Object.assign(loaded, parse(readFileSync(path)));
+  }
+
+  for (const [key, value] of Object.entries(loaded)) {
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+}
+
+loadLocalEnvFiles();
 
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),

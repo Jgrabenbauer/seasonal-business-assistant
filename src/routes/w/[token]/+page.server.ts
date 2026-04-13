@@ -38,7 +38,7 @@ export const load: PageServerLoad = async ({ params }) => {
       }
     }
   });
-  if (!workOrder) throw error(404, 'Work order not found');
+  if (!workOrder) throw error(404, 'Turnover not found');
 
   // Start run if not started
   if (workOrder.checklistRun && !workOrder.checklistRun.startedAt) {
@@ -68,7 +68,7 @@ export const load: PageServerLoad = async ({ params }) => {
     logActivity({
       organizationId: workOrder.organizationId,
       actionType: 'MAGIC_LINK_USED',
-      entityType: workOrder.turnoverId ? 'Turnover' : 'WorkOrder',
+      entityType: 'Turnover',
       entityId: workOrder.turnoverId ?? workOrder.id,
       metadata: { title: workOrder.title }
     });

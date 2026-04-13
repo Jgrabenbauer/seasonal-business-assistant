@@ -9,15 +9,27 @@ import type {
   WorkOrder,
   ReadinessEvent
 } from '@prisma/client';
+import { evaluateTurnoverReadiness, parseAcknowledgedExceptionIds } from '$lib/readiness';
 
 type TurnoverWithDetails = Turnover & {
   property: Property;
   verifiedBy: User | null;
+  exceptionOverrideBy: User | null;
+  exceptionOverrideAt: Date | null;
+  exceptionOverrideReason: string | null;
+  exceptionOverrideItemIds: unknown;
   workOrder: (WorkOrder & {
     checklistRun:
       | (ChecklistRun & {
           items: (ChecklistItemRun & {
-            attachments: { id: string; url: string; filename: string; mimeType: string }[];
+            attachments: {
+              id: string;
+              url: string;
+              filename: string;
+              mimeType: string;
+              createdAt: Date;
+              capturedByName: string | null;
+            }[];
           })[];
         })
       | null;
@@ -68,11 +80,28 @@ export async function generatePdf(
     });
   };
 
+  const formatTurnoverStatus = (status: string) => {
+    if (status === 'VERIFIED') return 'Guest-Ready (Verified)';
+    if (status === 'READY') return 'Needs Sign-Off';
+    return 'Not Guest-Ready';
+  };
+
+  const items = turnover.workOrder?.checklistRun?.items ?? [];
+  const readiness = evaluateTurnoverReadiness({
+    status: turnover.status,
+    items,
+    acknowledgedExceptionIds: parseAcknowledgedExceptionIds(turnover.exceptionOverrideItemIds),
+    guestArrivalAt: turnover.guestArrivalAt,
+    slaDeadlineAt: turnover.slaDeadlineAt
+  });
+
   // Header
   drawText(org.name, margin, y, 20, true);
   y -= 30;
-  drawText('Turnover Readiness Certificate', margin, y, 14);
-  y -= 20;
+  drawText('Turnover Readiness Report', margin, y, 14);
+  y -= 18;
+  drawText('Owner-ready turnover proof, verification, and photo evidence', margin, y, 10);
+  y -= 18;
   drawLine(y);
   y -= 20;
 
@@ -86,7 +115,7 @@ export async function generatePdf(
   y -= 18;
 
   drawText('Status:', margin, y, 11, true);
-  drawText(turnover.status, margin + 80, y, 11);
+  drawText(readiness.primaryLabel, margin + 80, y, 11);
   y -= 18;
 
   drawText('Guest Arrival:', margin, y, 11, true);
@@ -103,8 +132,22 @@ export async function generatePdf(
   drawText(slaStatus, margin + 80, y, 11);
   y -= 18;
 
-  drawText('Readiness Score:', margin, y, 11, true);
-  drawText(`${turnover.readinessScore}%`, margin + 110, y, 11);
+  drawText('Required Steps:', margin, y, 11, true);
+  drawText(
+    `${readiness.checklist.completedSteps}/${readiness.checklist.totalSteps} complete`,
+    margin + 110,
+    y,
+    11
+  );
+  y -= 18;
+
+  drawText('Required Proof:', margin, y, 11, true);
+  drawText(
+    `${readiness.proof.capturedRequiredPhotos}/${readiness.proof.requiredPhotos} captured`,
+    margin + 110,
+    y,
+    11
+  );
   y -= 18;
 
   if (turnover.verifiedAt) {
@@ -116,6 +159,15 @@ export async function generatePdf(
   if (turnover.verifiedBy) {
     drawText('Verified By:', margin, y, 11, true);
     drawText(turnover.verifiedBy.name, margin + 80, y, 11);
+    y -= 18;
+  }
+
+  if (turnover.exceptionOverrideReason) {
+    drawText('Acknowledged Issues:', margin, y, 11, true);
+    drawText(turnover.exceptionOverrideBy?.name ?? 'Manager', margin + 120, y, 11);
+    y -= 18;
+    drawText('Reason:', margin, y, 11, true);
+    drawText(turnover.exceptionOverrideReason, margin + 80, y, 11);
     y -= 18;
   }
 
@@ -159,6 +211,16 @@ export async function generatePdf(
       if (item.attachments.length > 0) {
         drawText(`   Photos: ${item.attachments.length}`, margin, y, 9);
         y -= 14;
+        const firstAttachment = item.attachments[0];
+        if (firstAttachment) {
+          drawText(
+            `   First photo: ${firstAttachment.capturedByName ?? 'Field worker'} · ${firstAttachment.createdAt.toLocaleString()}`,
+            margin,
+            y,
+            9
+          );
+          y -= 14;
+        }
       }
 
       y -= 4;
@@ -169,11 +231,16 @@ export async function generatePdf(
   y -= 10;
   drawLine(y);
   y -= 18;
-  drawText('Proof Photos', margin, y, 13, true);
+  drawText('Photo Evidence', margin, y, 13, true);
   y -= 18;
 
   const attachments =
-    run?.items.flatMap((item) => item.attachments) ?? [];
+    run?.items.flatMap((item) =>
+      item.attachments.map((attachment) => ({
+        ...attachment,
+        itemTitle: item.title
+      }))
+    ) ?? [];
   const maxPhotos = options.maxPhotos ?? 12;
   const photoAttachments = attachments.slice(0, maxPhotos);
 
@@ -267,6 +334,13 @@ export async function generatePdf(
       } else {
         col = 1;
       }
+
+      drawText(
+        `${attachment.itemTitle} · ${attachment.capturedByName ?? 'Field worker'}`,
+        x + 8,
+        yTop - boxHeight + 8,
+        8
+      );
     }
 
     if (col === 1) {

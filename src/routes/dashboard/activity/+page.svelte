@@ -8,7 +8,7 @@
     TURNOVER_SCHEDULED: 'Turnover scheduled',
     TURNOVER_ASSIGNED: 'Turnover assigned',
     TURNOVER_READY: 'Property marked ready',
-    TURNOVER_VERIFIED: 'Turnover verified',
+    TURNOVER_VERIFIED: 'Turnover verification completed',
     READINESS_STEP_COMPLETED: 'Readiness step completed',
     CHECKLIST_ITEM_COMPLETED: 'Checklist item completed',
     PHOTO_UPLOADED: 'Proof photo uploaded',
@@ -17,7 +17,7 @@
     WORKER_ADDED: 'Worker added',
     PROPERTY_ADDED: 'Property added',
     MAGIC_LINK_SENT: 'Magic link sent',
-    MAGIC_LINK_USED: 'Field link opened'
+    MAGIC_LINK_USED: 'Field turnover link opened'
   };
 
   function getLogMeta(log: PageData['logs'][number]) {
@@ -43,7 +43,7 @@
   <h1 class="text-2xl font-semibold">Readiness Activity</h1>
 
   {#if data.logs.length === 0}
-    <div class="rounded-lg border border-dashed border-border p-8 text-center text-muted-foreground">No activity yet.</div>
+    <div class="rounded-lg border border-dashed border-border p-8 text-center text-muted-foreground">No readiness activity yet.</div>
   {:else}
     <ul class="space-y-2">
       {#each data.logs as log (log.id)}

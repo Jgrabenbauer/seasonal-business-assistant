@@ -45,14 +45,14 @@
         { href: '/dashboard/workers', label: 'Field Team', icon: Users, roles: ['MANAGER', 'SUPERVISOR'] },
         { href: '/dashboard/sms-outbox', label: 'SMS Outbox', icon: MessageSquare, roles: ['MANAGER', 'SUPERVISOR'] },
         { href: '/dashboard/invites', label: 'Invites', icon: Mail, roles: ['MANAGER'] },
-        { href: '/dashboard/certificates', label: 'Certificates', icon: Award, roles: ['MANAGER', 'SUPERVISOR'] }
+        { href: '/dashboard/certificates', label: 'Readiness Reports', icon: Award, roles: ['MANAGER', 'SUPERVISOR'] }
       ]
     },
     {
       title: 'Analytics',
       links: [
         { href: '/dashboard/analytics', label: 'Readiness Analytics', icon: ChartBar, roles: ['MANAGER', 'SUPERVISOR'] },
-        { href: '/dashboard/activity', label: 'Activity Log', icon: Activity, roles: ['MANAGER', 'SUPERVISOR'] }
+        { href: '/dashboard/activity', label: 'Readiness Activity', icon: Activity, roles: ['MANAGER', 'SUPERVISOR'] }
       ]
     },
     {
@@ -64,9 +64,13 @@
     }
   ];
 
-  function isActive(href: string): boolean {
-    if (href === '/dashboard') return $page.url.pathname === '/dashboard';
-    return $page.url.pathname.startsWith(href);
+  let pathname = '';
+
+  $: pathname = $page.url.pathname;
+
+  function isActive(path: string, href: string): boolean {
+    if (href === '/dashboard') return path === '/dashboard';
+    return path.startsWith(href);
   }
 </script>
 
@@ -80,16 +84,18 @@
         </p>
         <div class="flex flex-col gap-0.5">
           {#each visibleLinks as link}
+            {@const active = isActive(pathname, link.href)}
             <a
               href={link.href}
+              aria-current={active ? 'page' : undefined}
               class={cn(
                 'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium no-underline transition-colors',
-                isActive(link.href)
+                active
                   ? 'bg-sidebar-active text-sidebar-active-foreground'
                   : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground'
               )}
             >
-              <svelte:component this={link.icon} size={16} strokeWidth={isActive(link.href) ? 2.5 : 2} />
+              <svelte:component this={link.icon} size={16} strokeWidth={active ? 2.5 : 2} />
               <span>{link.label}</span>
             </a>
           {/each}

@@ -4,8 +4,6 @@
   import Loader from 'lucide-svelte/icons/loader';
 
   export let item: { id: string; attachments: { id: string; url: string }[] };
-  export let runId: string;
-
   const dispatch = createEventDispatcher<{ uploaded: { url: string } }>();
 
   let uploading = false;

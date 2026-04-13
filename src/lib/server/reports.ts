@@ -27,6 +27,24 @@ export async function createReportLink(turnoverId: string, baseUrl?: string | UR
   return { turnover, reportUrl };
 }
 
+export async function getOrCreateReportLink(turnoverId: string, baseUrl?: string | URL | null) {
+  const existing = await db.shortLink.findFirst({
+    where: {
+      purpose: 'REPORT_LINK',
+      target: turnoverId,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }]
+    },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  if (existing) {
+    return `${resolveBaseUrl(baseUrl)}/reports/${existing.token}`;
+  }
+
+  const { reportUrl } = await createReportLink(turnoverId, baseUrl);
+  return reportUrl;
+}
+
 export function renderCompletionEmail(params: {
   orgName: string;
   brandAccentColor?: string | null;
@@ -69,16 +87,16 @@ export function renderCompletionEmail(params: {
     <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
       ${logo}
     </div>
-    <h2 style="margin:0 0 8px;">Turnover Ready</h2>
+    <h2 style="margin:0 0 8px;">Owner-ready turnover proof</h2>
     <p style="margin:0 0 16px;color:#444;">
-      ${params.workOrderTitle} at ${params.propertyName} is verified and guest-ready.
+      ${params.workOrderTitle} at ${params.propertyName} has been verified and is ready to share with the owner.
     </p>
     <table style="width:100%;border-collapse:collapse;margin:16px 0;">
       ${rows}
     </table>
     ${photos}
     <p style="margin:16px 0;">
-      <a href="${params.reportUrl}" style="background:${accent};color:#fff;text-decoration:none;padding:10px 14px;border-radius:6px;display:inline-block;">View readiness certificate</a>
+      <a href="${params.reportUrl}" style="background:${accent};color:#fff;text-decoration:none;padding:10px 14px;border-radius:6px;display:inline-block;">View turnover readiness report</a>
     </p>
     ${
       params.brandContactInfo

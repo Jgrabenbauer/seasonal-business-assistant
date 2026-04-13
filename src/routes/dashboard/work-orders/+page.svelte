@@ -3,7 +3,7 @@
 </svelte:head>
 
 <div class="rounded-lg border border-border bg-card p-8 text-center text-muted-foreground">
-  <p class="text-lg font-semibold mb-2">Work Orders have moved.</p>
+  <p class="text-lg font-semibold mb-2">Work orders have moved.</p>
   <p class="mb-4">Turnovers are now the primary workflow for readiness.</p>
   <a
     href="/dashboard/turnovers"

@@ -1,9 +1,16 @@
+import 'dotenv/config';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { PrismaClient } from '@prisma/client';
+import { createPrismaClient } from '../../src/lib/server/prisma-client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
-const db = new PrismaClient();
+const databaseUrl = process.env.DATABASE_URL;
+
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL is required to run integration tests');
+}
+
+const db = createPrismaClient(databaseUrl);
 
 const TEST_ORG_SLUG = `test-org-${Date.now()}`;
 

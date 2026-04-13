@@ -7,6 +7,9 @@
   import { formatDateTime } from '$lib/utils';
   import type { ActionData, PageData } from './$types';
   import { enhance } from '$app/forms';
+  import ShieldAlert from 'lucide-svelte/icons/shield-alert';
+  import TriangleAlert from 'lucide-svelte/icons/triangle-alert';
+  import BadgeCheck from 'lucide-svelte/icons/badge-check';
 
   export let data: PageData;
   export let form: ActionData;
@@ -38,7 +41,7 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = (form as { filename?: string }).filename ?? 'turnover-certificate.pdf';
+      a.download = (form as { filename?: string }).filename ?? 'turnover-readiness-report.pdf';
       a.click();
       URL.revokeObjectURL(url);
     }
@@ -46,6 +49,15 @@
 
   $: if (form && 'pdfBase64' in form) downloadPdf();
   $: turnover = data.turnover;
+  $: readiness = data.readiness;
+  $: items = turnover.workOrder?.checklistRun?.items ?? [];
+  $: proofPhotos = items.flatMap((item) =>
+    item.attachments.map((att) => ({
+      ...att,
+      itemTitle: item.title,
+      capturedByName: att.capturedByName ?? turnover.assignedTo?.name ?? 'Field worker'
+    }))
+  );
 </script>
 
 <svelte:head>
@@ -55,32 +67,85 @@
 <div class="flex items-center gap-2 text-muted-foreground text-sm mb-4">
   <a href="/dashboard/turnovers" class="text-primary underline-offset-4 hover:underline">Turnovers</a>
   <span>/</span>
-  <span class="truncate text-foreground">{turnover.title}</span>
+  <span class="truncate text-foreground">{turnover.property.name}</span>
 </div>
 
-<div class="flex flex-wrap items-start justify-between gap-4 mb-6">
-  <div>
-    <h1 class="text-2xl font-semibold">{turnover.title}</h1>
-    <p class="text-muted-foreground mt-1">
-      {turnover.property.name}
-      &middot; Arrival {formatDateTime(turnover.guestArrivalAt)}
-    </p>
-    <p class="text-muted-foreground text-sm mt-1">
-      SLA deadline {formatDateTime(turnover.slaDeadlineAt)}
-      · SLA offset {data.slaOffsetHours}h ({data.slaSource === 'property' ? 'Property override' : 'Org default'})
-      {#if turnover.readyAt}
-        · Ready {formatDateTime(turnover.readyAt)}
+<div class="rounded-3xl border border-slate-200 bg-[linear-gradient(135deg,rgba(248,250,252,1),rgba(255,247,237,0.95))] p-6 shadow-sm mb-6">
+  <div class="flex flex-wrap items-start justify-between gap-4">
+    <div class="max-w-3xl">
+      <p class="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Guest-Ready Truth</p>
+      <h1 class="mt-2 text-3xl font-semibold tracking-tight">{turnover.property.name}</h1>
+      <p class="mt-1 text-sm text-muted-foreground">{turnover.title}</p>
+      <div class="mt-3 flex flex-wrap gap-2">
+        <StatusBadge status={turnover.status} />
+        {#if readiness.primaryState === 'GUEST_READY_VERIFIED'}
+          <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800">
+            <BadgeCheck size={12} strokeWidth={2} />
+            {readiness.primaryLabel}
+          </span>
+        {:else if readiness.primaryState === 'NEEDS_SIGN_OFF'}
+          <span class="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2.5 py-1 text-xs font-medium text-orange-800">
+            <ShieldAlert size={12} strokeWidth={2} />
+            {readiness.primaryLabel}
+          </span>
+        {:else}
+          <span class="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-800">
+            <TriangleAlert size={12} strokeWidth={2} />
+            {readiness.primaryLabel}
+          </span>
+        {/if}
+      </div>
+      <p class="mt-3 text-sm text-foreground">{readiness.primaryDescription}</p>
+      <p class="mt-2 text-sm text-muted-foreground">
+        Guest arrival {formatDateTime(turnover.guestArrivalAt)} · Readiness deadline {formatDateTime(turnover.slaDeadlineAt)}
+      </p>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2">
+      {#if data.reportUrl}
+        <Button href={data.reportUrl} target="_blank" rel="noopener noreferrer" variant="outline" size="sm">
+          Open Confidence Report
+        </Button>
       {/if}
-      {#if turnover.verifiedAt}
-        · Verified {formatDateTime(turnover.verifiedAt)}
-      {/if}
-    </p>
+      <form method="POST" action="?/export_pdf" use:enhance>
+        <Button type="submit" variant="outline" size="sm">Export Report</Button>
+      </form>
+    </div>
   </div>
-  <div class="flex items-center gap-2">
-    <StatusBadge status={turnover.status} />
-    <form method="POST" action="?/export_pdf" use:enhance>
-      <Button type="submit" variant="outline" size="sm">Export Certificate</Button>
-    </form>
+
+  <div class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div class="rounded-2xl border border-white/80 bg-white/80 p-4">
+      <p class="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Required Steps</p>
+      <p class="mt-2 text-base font-semibold">
+        {readiness.checklist.completedSteps}/{readiness.checklist.totalSteps} complete
+      </p>
+      <p class="mt-1 text-sm text-muted-foreground">Every checklist step must be complete before sign-off.</p>
+    </div>
+    <div class="rounded-2xl border border-white/80 bg-white/80 p-4">
+      <p class="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Required Proof</p>
+      <p class="mt-2 text-base font-semibold">
+        {readiness.proof.capturedRequiredPhotos}/{readiness.proof.requiredPhotos} photos captured
+      </p>
+      <p class="mt-1 text-sm text-muted-foreground">{readiness.proof.totalPhotos} total proof photo{readiness.proof.totalPhotos === 1 ? '' : 's'} uploaded.</p>
+    </div>
+    <div class="rounded-2xl border border-white/80 bg-white/80 p-4">
+      <p class="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Verification</p>
+      <p class="mt-2 text-base font-semibold">
+        {turnover.verifiedBy ? turnover.verifiedBy.name : turnover.status === 'READY' ? 'Pending sign-off' : 'Not verified'}
+      </p>
+      <p class="mt-1 text-sm text-muted-foreground">
+        {turnover.verifiedAt ? `Verified ${formatDateTime(turnover.verifiedAt)}` : 'Verification has not happened yet.'}
+      </p>
+    </div>
+    <div class="rounded-2xl border border-white/80 bg-white/80 p-4">
+      <p class="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Exceptions</p>
+      <p class="mt-2 text-base font-semibold">{readiness.checklist.skippedSteps}</p>
+      <p class="mt-1 text-sm text-muted-foreground">
+        {readiness.override.active
+          ? `${readiness.acknowledgedIssueCount} acknowledged issue${readiness.acknowledgedIssueCount === 1 ? '' : 's'} on file`
+          : 'Open issues must be acknowledged before sign-off.'}
+      </p>
+    </div>
   </div>
 </div>
 
@@ -91,36 +156,134 @@
   <div class="rounded-md bg-green-50 border border-green-200 text-green-800 px-4 py-3 text-sm mb-4">Link resent successfully.</div>
 {/if}
 {#if form?.sentExternal}
-  <div class="rounded-md bg-green-50 border border-green-200 text-green-800 px-4 py-3 text-sm mb-4">Certificate sent successfully.</div>
+  <div class="rounded-md bg-green-50 border border-green-200 text-green-800 px-4 py-3 text-sm mb-4">Owner update sent successfully.</div>
 {/if}
 
-<div class="rounded-lg border border-border bg-card shadow-sm p-6 mb-6">
-  <div class="flex items-center justify-between mb-4">
-    <h2 class="text-lg font-semibold">Readiness Summary</h2>
-    <Badge variant="secondary">{data.readinessScore}% readiness</Badge>
-  </div>
-  <div class="h-2 bg-secondary rounded-full overflow-hidden">
-    <div class="h-full bg-primary rounded-full transition-all" style="width: {data.readinessScore}%"></div>
-  </div>
-  <div class="mt-4 flex flex-wrap gap-2">
-    {#if turnover.status !== 'READY' && turnover.status !== 'VERIFIED'}
-      <form method="POST" action="?/mark_ready" use:enhance>
-        <Button type="submit">
-          {data.verificationRequired ? 'Mark Property Ready' : 'Mark Verified'}
-        </Button>
-      </form>
+<div class="grid gap-6 xl:grid-cols-[1.15fr,0.85fr] mb-6">
+  <div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
+    <div class="flex items-center justify-between gap-3 mb-4">
+      <div>
+        <h2 class="text-lg font-semibold">Blockers</h2>
+        <p class="mt-1 text-sm text-muted-foreground">The turnover cannot move forward until these are resolved or explicitly acknowledged.</p>
+      </div>
+      <Badge variant="secondary">{readiness.blockerCount}</Badge>
+    </div>
+
+    {#if readiness.blockers.length === 0}
+      <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+        <p class="font-medium text-emerald-900">No active blockers.</p>
+        <p class="mt-1 text-sm text-emerald-800">The checklist and proof meet the readiness rules.</p>
+      </div>
+    {:else}
+      <div class="space-y-3">
+        {#each readiness.blockers as blocker}
+          <div class="rounded-2xl border border-red-200 bg-red-50 p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="font-medium text-red-950">{blocker.label}</p>
+                <p class="mt-1 text-sm text-red-900/80">{blocker.count} item{blocker.count === 1 ? '' : 's'} still blocking readiness.</p>
+              </div>
+              <Badge class="bg-red-600 text-white">{blocker.count}</Badge>
+            </div>
+            <ul class="mt-3 space-y-1 text-sm text-red-900/90">
+              {#each blocker.items as itemTitle}
+                <li>{itemTitle}</li>
+              {/each}
+            </ul>
+          </div>
+        {/each}
+      </div>
     {/if}
-    {#if turnover.status === 'READY' && data.verificationRequired}
-      <form method="POST" action="?/verify" use:enhance>
-        <Button type="submit">Verify Turnover</Button>
+
+    {#if readiness.override.active}
+      <div class="mt-4 rounded-2xl border border-orange-200 bg-orange-50 p-4">
+        <p class="font-medium text-orange-950">Acknowledged Issues</p>
+        <p class="mt-1 text-sm text-orange-900/85">
+          {readiness.override.acknowledgedByName ?? 'Manager'} acknowledged {readiness.acknowledgedIssueCount}
+          issue{readiness.acknowledgedIssueCount === 1 ? '' : 's'}
+          {#if readiness.override.acknowledgedAt}
+            on {formatDateTime(readiness.override.acknowledgedAt)}
+          {/if}
+          .
+        </p>
+        {#if readiness.override.reason}
+          <p class="mt-2 text-sm text-orange-900">{readiness.override.reason}</p>
+        {/if}
+      </div>
+    {/if}
+  </div>
+
+  <div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
+    <div class="flex items-center justify-between gap-3 mb-4">
+      <div>
+        <h2 class="text-lg font-semibold">Decision</h2>
+        <p class="mt-1 text-sm text-muted-foreground">Ready and verified are controlled state changes.</p>
+      </div>
+      <Badge variant="secondary">{readiness.primaryLabel}</Badge>
+    </div>
+
+    {#if turnover.status === 'VERIFIED'}
+      <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+        <p class="font-medium text-emerald-950">Verified by {turnover.verifiedBy?.name ?? 'Manager'}</p>
+        <p class="mt-1 text-sm text-emerald-900/85">
+          {turnover.verifiedAt ? formatDateTime(turnover.verifiedAt) : 'Verification time unavailable'}
+        </p>
+      </div>
+    {:else if turnover.status === 'READY'}
+      <form method="POST" action="?/verify" use:enhance class="space-y-4">
+        <div class="rounded-2xl border border-orange-200 bg-orange-50 p-4">
+          <p class="font-medium text-orange-950">Needs manager sign-off</p>
+          <p class="mt-1 text-sm text-orange-900/85">Verification records who approved this turnover and when.</p>
+        </div>
+        <label class="flex items-start gap-3 rounded-xl border border-border p-3 text-sm">
+          <input type="checkbox" name="confirmVerification" class="mt-0.5 h-4 w-4 rounded border border-input" />
+          <span>I reviewed the checklist proof, photos, and any acknowledged issues for this turnover.</span>
+        </label>
+        <Button type="submit">Verify Guest-Ready</Button>
       </form>
+    {:else if readiness.canMarkReady}
+      <form method="POST" action="?/mark_ready" use:enhance class="space-y-4">
+        <div class="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+          <p class="font-medium text-emerald-950">Ready for sign-off</p>
+          <p class="mt-1 text-sm text-emerald-900/85">All enforcement rules pass. Promote this turnover to manager sign-off.</p>
+        </div>
+        <Button type="submit">Mark Ready for Sign-Off</Button>
+      </form>
+    {:else if readiness.canOverrideReady}
+      <form method="POST" action="?/mark_ready_override" use:enhance class="space-y-4">
+        <div class="rounded-2xl border border-orange-200 bg-orange-50 p-4">
+          <p class="font-medium text-orange-950">Open issues require explicit acknowledgment</p>
+          <p class="mt-1 text-sm text-orange-900/85">Incomplete steps and missing proof are still blocked. Only open issues can be acknowledged for sign-off.</p>
+        </div>
+        <div class="space-y-1.5">
+          <Label for="overrideReason">Acknowledgment Reason</Label>
+          <textarea
+            id="overrideReason"
+            name="overrideReason"
+            rows="4"
+            class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            placeholder="Explain why these issues are acceptable for sign-off."
+            required
+          ></textarea>
+        </div>
+        <Button type="submit" variant="outline">Acknowledge Issues and Mark Ready</Button>
+      </form>
+    {:else}
+      <div class="rounded-2xl border border-red-200 bg-red-50 p-4">
+        <p class="font-medium text-red-950">Cannot move this turnover forward yet.</p>
+        <p class="mt-1 text-sm text-red-900/85">Resolve the blockers above before it can be marked ready.</p>
+      </div>
     {/if}
   </div>
 </div>
 
-<!-- Assignment -->
-<div class="rounded-lg border border-border bg-card shadow-sm p-6 mb-6">
-  <h2 class="text-lg font-semibold mb-4">Readiness Assignment</h2>
+<div class="rounded-2xl border border-border bg-card p-6 shadow-sm mb-6">
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-lg font-semibold">Field Turnover Flow</h2>
+    {#if turnover.assignedTo}
+      <Badge variant="secondary">{turnover.assignedTo.name}</Badge>
+    {/if}
+  </div>
 
   {#if turnover.assignedTo}
     <div class="flex flex-wrap items-center justify-between gap-4">
@@ -141,11 +304,9 @@
     </div>
     {#if data.magicLink}
       <div class="mt-3">
-        <p class="text-xs text-muted-foreground mb-1">Short Link:</p>
+        <p class="text-xs text-muted-foreground mb-1">Short Link</p>
         <div class="flex items-center gap-2">
-          <code class="text-xs bg-muted px-2 py-1 rounded break-all flex-1">
-            {data.shortLink ?? '—'}
-          </code>
+          <code class="text-xs bg-muted px-2 py-1 rounded break-all flex-1">{data.shortLink ?? '—'}</code>
           {#if data.shortLink}
             <Button
               type="button"
@@ -180,80 +341,132 @@
       <Button type="submit">Assign &amp; Send SMS</Button>
     </form>
   {/if}
+
+  {#if data.smsUpdates.length > 0}
+    <div class="mt-5 border-t border-border pt-5">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-medium">Updates Sent</h3>
+        <Badge variant="secondary">{data.smsUpdates.length}</Badge>
+      </div>
+      <ul class="space-y-2">
+        {#each data.smsUpdates as message}
+          <li class="rounded-lg border border-border bg-muted/30 p-3">
+            <div class="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>{message.to}</span>
+              <span>{formatDateTime(message.createdAt)}</span>
+            </div>
+            <p class="mt-2 text-sm">{message.body}</p>
+          </li>
+        {/each}
+      </ul>
+    </div>
+  {/if}
 </div>
 
-<!-- Readiness Steps -->
-{#if turnover.workOrder?.checklistRun}
-  {@const run = turnover.workOrder.checklistRun}
-  <div class="rounded-lg border border-border bg-card shadow-sm p-6">
+<div class="grid gap-6 xl:grid-cols-[1.15fr,0.85fr]">
+  <div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
     <div class="flex items-center justify-between mb-4">
-      <h2 class="text-lg font-semibold">Readiness Steps</h2>
-      {#if run.completedAt}
-        <Badge class="bg-green-500 text-white">Completed {formatDateTime(run.completedAt)}</Badge>
-      {:else if run.startedAt}
-        <Badge variant="secondary">Started {formatDateTime(run.startedAt)}</Badge>
-      {/if}
+      <h2 class="text-lg font-semibold">Proof as Evidence</h2>
+      <Badge variant="secondary">{proofPhotos.length}</Badge>
     </div>
 
+    {#if proofPhotos.length > 0}
+      <div class="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {#each proofPhotos as photo}
+          <figure class="overflow-hidden rounded-2xl border border-border bg-muted/20">
+            <img src={photo.url} alt={photo.filename} class="aspect-[4/3] w-full object-cover" />
+            <figcaption class="px-4 py-3">
+              <p class="text-sm font-medium">{photo.itemTitle}</p>
+              <p class="mt-1 text-xs text-muted-foreground">Captured by {photo.capturedByName} · {formatDateTime(photo.createdAt)}</p>
+            </figcaption>
+          </figure>
+        {/each}
+      </div>
+    {/if}
+
     <ul class="space-y-3">
-      {#each run.items as item}
-        <li class="flex items-start gap-3 p-3 rounded-lg bg-muted/40">
-          <span class="mt-0.5 flex-shrink-0">
-            {#if item.status === 'COMPLETED'}
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-600"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>
-            {:else if item.status === 'SKIPPED'}
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground"><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            {:else}
-              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-muted-foreground"><circle cx="12" cy="12" r="10"/></svg>
-            {/if}
-          </span>
-          <div class="flex-1 min-w-0">
-            <p class="font-medium" class:line-through={item.status === 'COMPLETED'}>{item.title}</p>
-            {#if item.notes}
-              <p class="text-sm text-muted-foreground mt-1">{item.notes}</p>
-            {/if}
-            {#if item.completedAt}
-              <p class="text-xs text-muted-foreground mt-1">{formatDateTime(item.completedAt)}</p>
-            {/if}
-            {#if item.attachments.length > 0}
-              <div class="flex flex-wrap gap-2 mt-2">
-                {#each item.attachments as att}
-                  <a href={att.url} target="_blank" rel="noopener noreferrer">
-                    <img src={att.url} alt={att.filename} class="w-16 h-16 object-cover rounded" />
-                  </a>
-                {/each}
-              </div>
-            {/if}
+      {#each items as item}
+        <li class="rounded-2xl border border-border bg-muted/20 p-4">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <p class="font-medium">{item.title}</p>
+              {#if item.notes}
+                <p class="mt-1 text-sm text-muted-foreground">{item.notes}</p>
+              {/if}
+              {#if item.completedAt}
+                <p class="mt-1 text-xs text-muted-foreground">{formatDateTime(item.completedAt)}</p>
+              {/if}
+            </div>
+            <div class="flex items-center gap-2">
+              {#if item.attachments.length > 0}
+                <Badge variant="secondary">{item.attachments.length} photo{item.attachments.length === 1 ? '' : 's'}</Badge>
+              {/if}
+              <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium {item.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-800' : item.status === 'SKIPPED' ? 'bg-orange-100 text-orange-800' : 'bg-red-100 text-red-800'}">
+                {item.status === 'COMPLETED' ? 'Complete' : item.status === 'SKIPPED' ? 'Open Issue' : 'Incomplete'}
+              </span>
+            </div>
           </div>
+          {#if item.photoRequired && item.attachments.length === 0}
+            <p class="mt-2 text-xs font-medium text-red-700">Required proof photo missing.</p>
+          {/if}
         </li>
       {/each}
     </ul>
   </div>
-{:else if turnover.template}
-  <div class="rounded-lg border border-border bg-card shadow-sm p-6">
-    <p class="text-muted-foreground">Readiness steps will be created when a worker is assigned.</p>
-    <p class="text-sm text-muted-foreground mt-1">Template: {turnover.template.name}</p>
-  </div>
-{:else}
-  <div class="rounded-lg border border-border bg-card shadow-sm p-6">
-    <p class="text-muted-foreground">No readiness template attached to this turnover.</p>
-  </div>
-{/if}
 
-<!-- External Notification -->
-{#if turnover.status === 'VERIFIED' && turnover.organization.planType === 'PRO'}
-  <div class="rounded-lg border border-border bg-card shadow-sm p-6 mt-6">
-    <h2 class="text-lg font-semibold mb-4">Owner/Guest Notification</h2>
-    <form method="POST" action="?/send_external" use:enhance class="space-y-4">
-      <div class="space-y-1.5">
-        <Label for="email">Recipient Email</Label>
-        <Input id="email" type="email" name="email" placeholder="owner@example.com" required />
+  <div class="space-y-6">
+    <div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold">Audit Trail</h2>
+        <Badge variant="secondary">{data.turnover.readinessHistory.length}</Badge>
       </div>
-      <div class="space-y-1.5">
-        <Label for="sms">Recipient SMS (optional)</Label>
-        <Input id="sms" type="tel" name="sms" placeholder="+15085551234" />
+      {#if data.turnover.readinessHistory.length === 0}
+        <p class="text-sm text-muted-foreground">No readiness events recorded yet.</p>
+      {:else}
+        <ul class="space-y-3">
+          {#each data.turnover.readinessHistory as event}
+            <li class="rounded-2xl border border-border bg-muted/20 p-4">
+              <div class="flex items-center justify-between gap-2">
+                <StatusBadge status={event.status} />
+                <span class="text-xs text-muted-foreground">{formatDateTime(event.occurredAt)}</span>
+              </div>
+              {#if event.note}
+                <p class="mt-2 text-sm">{event.note}</p>
+              {/if}
+              {#if event.actor}
+                <p class="mt-1 text-xs text-muted-foreground">{event.actor.name}</p>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
+
+    {#if turnover.status === 'VERIFIED' && turnover.organization.planType === 'PRO'}
+      <div class="rounded-2xl border border-border bg-card p-6 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 class="text-lg font-semibold">Send Proof to Owner</h2>
+            <p class="text-sm text-muted-foreground mt-1">Share the verified report once you are comfortable standing behind the evidence.</p>
+          </div>
+          {#if data.reportUrl}
+            <Button href={data.reportUrl} target="_blank" rel="noopener noreferrer" variant="outline" size="sm">
+              Preview report
+            </Button>
+          {/if}
+        </div>
+        <form method="POST" action="?/send_external" use:enhance class="space-y-4">
+          <div class="space-y-1.5">
+            <Label for="email">Recipient Email</Label>
+            <Input id="email" type="email" name="email" placeholder="owner@example.com" required />
+          </div>
+          <div class="space-y-1.5">
+            <Label for="sms">Recipient SMS (optional)</Label>
+            <Input id="sms" type="tel" name="sms" placeholder="+15085551234" />
+          </div>
+          <Button type="submit">Send Owner Update</Button>
+        </form>
       </div>
-      <Button type="submit">Send Readiness Certificate</Button>
-    </form>
+    {/if}
   </div>
-{/if}
+</div>

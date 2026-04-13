@@ -13,10 +13,10 @@
   const statuses = ['', 'NOT_READY', 'IN_PROGRESS', 'READY', 'VERIFIED'];
   const statusLabels: Record<string, string> = {
     '': 'All',
-    NOT_READY: 'Upcoming',
-    IN_PROGRESS: 'In Progress',
-    READY: 'Ready',
-    VERIFIED: 'Verified'
+    NOT_READY: 'Not Guest-Ready',
+    IN_PROGRESS: 'Not Guest-Ready',
+    READY: 'Needs Sign-Off',
+    VERIFIED: 'Guest-Ready'
   };
 </script>
 
@@ -40,7 +40,7 @@
     <form method="POST" action="?/create" class="space-y-4">
       <div class="space-y-1.5">
         <Label for="title">Turnover Name</Label>
-        <Input id="title" type="text" name="title" required placeholder="July Turnover" />
+        <Input id="title" type="text" name="title" required placeholder="Friday Arrival - Porter Family" />
       </div>
       <div class="space-y-1.5">
         <Label for="propertyId">Property</Label>
@@ -72,7 +72,7 @@
         <div class="space-y-1.5">
           <Label for="slaDeadlineAt">SLA Deadline</Label>
           <Input id="slaDeadlineAt" type="datetime-local" name="slaDeadlineAt" />
-          <p class="text-xs text-muted-foreground">Leave blank to use SLA policy.</p>
+          <p class="text-xs text-muted-foreground">Leave blank to use the property or organization readiness deadline.</p>
         </div>
       </div>
       <Button type="submit">Schedule Turnover</Button>

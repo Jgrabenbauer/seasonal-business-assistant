@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model Organization {
@@ -92,6 +91,7 @@ model User {
   assignedTurnovers Turnover[] @relation("TurnoverAssigned")
   createdTurnovers  Turnover[] @relation("TurnoverCreated")
   verifiedTurnovers Turnover[] @relation("TurnoverVerified")
+  exceptionOverrideTurnovers Turnover[] @relation("TurnoverExceptionOverride")
   readinessEvents   ReadinessEvent[]
   generatedOwnerReports OwnerReport[]
   activityLogs   ActivityLog[]
@@ -174,6 +174,11 @@ model Turnover {
   verifiedAt       DateTime?
   verifiedById     String?
   verifiedBy       User?           @relation("TurnoverVerified", fields: [verifiedById], references: [id])
+  exceptionOverrideAt DateTime?
+  exceptionOverrideReason String?
+  exceptionOverrideById String?
+  exceptionOverrideBy User? @relation("TurnoverExceptionOverride", fields: [exceptionOverrideById], references: [id])
+  exceptionOverrideItemIds Json?
   workOrder        WorkOrder?
   turnoverChecks   TurnovernessCheck[]
   ownerReport      OwnerReport?
@@ -262,6 +267,7 @@ model Attachment {
   filename  String
   mimeType  String
   sizeBytes Int
+  capturedByName String?
   createdAt DateTime         @default(now())
 }
 

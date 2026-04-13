@@ -17,9 +17,13 @@
     { href: '/dashboard/workers', label: 'Workers', icon: Users }
   ];
 
-  function isMobileActive(href: string): boolean {
-    if (href === '/dashboard') return $page.url.pathname === '/dashboard';
-    return $page.url.pathname.startsWith(href);
+  let pathname = '';
+
+  $: pathname = $page.url.pathname;
+
+  function isMobileActive(path: string, href: string): boolean {
+    if (href === '/dashboard') return path === '/dashboard';
+    return path.startsWith(href);
   }
 </script>
 
@@ -61,7 +65,7 @@
     <!-- Mobile bottom nav -->
     <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-40 flex">
       {#each mobileNavItems as item}
-        {@const active = isMobileActive(item.href)}
+        {@const active = isMobileActive(pathname, item.href)}
         <a
           href={item.href}
           aria-current={active ? 'page' : undefined}

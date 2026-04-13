@@ -22,7 +22,25 @@ export const load: PageServerLoad = async ({ locals, url }) => {
       orderBy: { guestArrivalAt: 'asc' },
       skip,
       take: limit,
-      include: { property: true, assignedTo: true }
+      include: {
+        property: true,
+        assignedTo: true,
+        verifiedBy: true,
+        workOrder: {
+          include: {
+            checklistRun: {
+              include: {
+                items: {
+                  include: {
+                    attachments: true
+                  },
+                  orderBy: { sortOrder: 'asc' }
+                }
+              }
+            }
+          }
+        }
+      }
     }),
     db.turnover.count({ where }),
     db.property.findMany({
